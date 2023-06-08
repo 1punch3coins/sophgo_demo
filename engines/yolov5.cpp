@@ -26,7 +26,7 @@ static float constexpr AnchorHeightList[] = {1.0};
 #endif
 
 int32_t Yolov5::Initialize(const std::string& model) {
-    TensorInfo* p_info = new TensorInfo(TensorInfo::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
+    NetworkMeta* p_info = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
     p_info->normalize.mean[0] = qMeanList[0];
     p_info->normalize.mean[1] = qMeanList[1];
     p_info->normalize.mean[2] = qMeanList[2];

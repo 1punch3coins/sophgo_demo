@@ -9,6 +9,11 @@
 #define MODEL_POST_ORIGIN false
 #define IDENTIFIER "obj_det"
 
+static constexpr int32_t kInputTensorNum = 1;
+static constexpr int32_t kOutputTensorNum = 1;
+static constexpr std::array<const char*, 1> sInputNameList = {"images"};
+static constexpr std::array<const char*, 1> sOutputNameList = {"output0_Transpose_f32"};
+
 static constexpr float qMeanList[] = {0.0, 0.0, 0.0};
 static constexpr float qNormList[] = {1.0, 1.0, 1.0};
 static constexpr int32_t kGridScaleList[] = {8, 16, 32};
@@ -25,13 +30,19 @@ static constexpr int32_t kOutputChannels = 2 + 4;
 static int32_t OutputSpatialSize = 0;
 
 int32_t Yolov8::Initialize(const std::string& model) {
-    TensorInfo* p_info = new TensorInfo(TensorInfo::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
+    NetworkMeta* p_info = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC, kInputTensorNum, kOutputTensorNum);
     p_info->normalize.mean[0] = qMeanList[0];
     p_info->normalize.mean[1] = qMeanList[1];
     p_info->normalize.mean[2] = qMeanList[2];
     p_info->normalize.norm[0] = qNormList[0];
     p_info->normalize.norm[1] = qNormList[1];
     p_info->normalize.norm[2] = qNormList[2];
+    for (const auto& input_name : sInputNameList) {
+        p_info->AddInputTensorMeta(input_name);
+    }
+    for (const auto& output_name : sOutputNameList) {
+        p_info->AddOutputTensorMeta(output_name);
+    }
     bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeDet, p_info));
 
     if (!bmrun_helper_) {

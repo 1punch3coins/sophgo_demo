@@ -8,15 +8,16 @@
 
 #define USE_BMCV true
 
-BmrunHelper* BmrunHelper::Create(const std::string& model, int32_t task_id, TensorInfo* p_info) {
+BmrunHelper* BmrunHelper::Create(const std::string& model, int32_t task_id, NetworkMeta* p_info) {
     BmrunHelper*p = new BmrunHelper();
     p->model_pwd_ = model.c_str();
     p->task_ = task_id;
-    p->tensor_info_.reset(p_info);
+    p->network_meta_.reset(p_info);
     return p;
 }
 
 int32_t BmrunHelper::Initialize() {
+    // 1.
     if (bm_dev_request(&bm_handle_, 0) != BM_SUCCESS)
         return 0;
     p_bmrt_ = bmrt_create(bm_handle_);
@@ -26,117 +27,139 @@ int32_t BmrunHelper::Initialize() {
         return 0;
     bmrt_get_network_names(p_bmrt_, &net_names_);
     auto net_info = bmrt_get_network_info(p_bmrt_, net_names_[0]);
-
-    bm_shape_t input_shape = net_info->stages[0].input_shapes[0];
-    if (tensor_info_->input_nchw) {
-        tensor_info_->net_in_c = input_shape.dims[1];
-        tensor_info_->net_in_h = input_shape.dims[2];
-        tensor_info_->net_in_w = input_shape.dims[3];
-    } else {
-        tensor_info_->net_in_h = input_shape.dims[1];
-        tensor_info_->net_in_w = input_shape.dims[2];
-        tensor_info_->net_in_c = input_shape.dims[3];
+    if (network_meta_->input_tensor_meta_list.size() != net_info->input_num) {
+        return 0;
     }
-    tensor_info_->batch_size = input_shape.dims[0];
-    tensor_info_->input_scale = net_info->input_scales[0];
-    tensor_info_->output_scale = net_info->output_scales[0];
-
-    bm_shape_t output_shape = net_info->stages[0].output_shapes[0];
-    if (output_shape.num_dims == 3) {
-        if (tensor_info_->output_nlc) {
-            tensor_info_->net_out_l = output_shape.dims[1];
-            tensor_info_->net_out_c = output_shape.dims[2];
-        } else {
-            tensor_info_->net_out_c = output_shape.dims[1];
-            tensor_info_->net_out_l = output_shape.dims[2];
-        }
+    if (network_meta_->output_tensor_meta_list.size() != net_info->output_num) {
+        return 0;
     }
-    if (output_shape.num_dims == 4) {
-        if (tensor_info_->output_nlc) {
-            tensor_info_->net_out_h = output_shape.dims[1];
-            tensor_info_->net_out_w = output_shape.dims[2];
-            tensor_info_->net_out_c = output_shape.dims[3];
-            tensor_info_->net_out_l = output_shape.dims[1] * output_shape.dims[2];
-        } else {
-            tensor_info_->net_out_c = output_shape.dims[1];
-            tensor_info_->net_out_h = output_shape.dims[2];
-            tensor_info_->net_out_w = output_shape.dims[3];
-            tensor_info_->net_out_l = output_shape.dims[2] * output_shape.dims[3];
+    network_meta_->input_tensor_num = network_meta_->input_tensor_meta_list.size();
+    network_meta_->output_tensor_num = network_meta_->output_tensor_meta_list.size();
+    for (int32_t i = 0; i < network_meta_->input_tensor_num; i++) {
+        network_meta_->input_name2index.insert({network_meta_->input_tensor_meta_list[i].tensor_name, i});
+    }
+    for (int32_t i = 0; i < network_meta_->output_tensor_num; i++) {
+        network_meta_->output_name2index.insert({network_meta_->output_tensor_meta_list[i].tensor_name, i});
+    }
+
+    // 2.1 readin model's input metadata // if input meta's sort and network's tensor sort not matched, TO DO
+    char const** input_names = net_info->input_names;
+    for (auto& input_tensor_meta : network_meta_->input_tensor_meta_list) {
+        int32_t index = 0;
+        for (; index < net_info->input_num; index++) {
+            if (std::string(input_names[index]) == input_tensor_meta.tensor_name)
+                break;
         }
+        bm_shape_t input_shape = net_info->stages[0].input_shapes[index];
+        if (network_meta_->input_nchw) {
+            input_tensor_meta.net_in_c = input_shape.dims[1];
+            input_tensor_meta.net_in_h = input_shape.dims[2];
+            input_tensor_meta.net_in_w = input_shape.dims[3];
+        } else {
+            input_tensor_meta.net_in_h = input_shape.dims[1];
+            input_tensor_meta.net_in_w = input_shape.dims[2];
+            input_tensor_meta.net_in_c = input_shape.dims[3];
+        }
+        input_tensor_meta.input_scale = net_info->input_scales[index];
+        input_tensor_meta.net_in_elements = network_meta_->batch_size * input_tensor_meta.net_in_c * input_tensor_meta.net_in_h * input_tensor_meta.net_in_w;
+        network_meta_->batch_size = input_shape.dims[0];
+    }
+
+    // 2.2 Readin model's output metadata // if output meta's sort and network's tensor sort not matched, TO DO
+    char const** output_names = net_info->output_names;
+    for (auto& output_tensor_meta : network_meta_->output_tensor_meta_list) {
+        int32_t index = 0;
+        for (; index < net_info->output_num; index++) {
+            if (std::string(output_names[index]) == output_tensor_meta.tensor_name)
+                break;
+        }
+        bm_shape_t output_shape = net_info->stages[0].output_shapes[index];
+        if (output_shape.num_dims == 3) {
+            if (network_meta_->output_nlc) {
+                output_tensor_meta.net_out_l = output_shape.dims[1];
+                output_tensor_meta.net_out_c = output_shape.dims[2];
+            } else {
+                output_tensor_meta.net_out_c = output_shape.dims[1];
+                output_tensor_meta.net_out_l = output_shape.dims[2];
+            }
+        }
+        if (output_shape.num_dims == 4) {
+            if (network_meta_->output_nlc) {
+                output_tensor_meta.net_out_h = output_shape.dims[1];
+                output_tensor_meta.net_out_w = output_shape.dims[2];
+                output_tensor_meta.net_out_c = output_shape.dims[3];
+                output_tensor_meta.net_out_l = output_shape.dims[1] * output_shape.dims[2];
+            } else {
+                output_tensor_meta.net_out_c = output_shape.dims[1];
+                output_tensor_meta.net_out_h = output_shape.dims[2];
+                output_tensor_meta.net_out_w = output_shape.dims[3];
+                output_tensor_meta.net_out_l = output_shape.dims[2] * output_shape.dims[3];
+            }
+        }
+        output_tensor_meta.output_scale = net_info->output_scales[index];
+        output_tensor_meta.net_out_elements = network_meta_->batch_size * output_tensor_meta.net_out_c * output_tensor_meta.net_out_l;
     }
     
-    if (!USE_BMCV) {
-        if (net_info->input_dtypes[0] == BM_FLOAT32) {
-            tensor_info_->tensor_type = TensorInfo::kTensorTypeFloat32;
-            input_ptr_ = new float[tensor_info_->batch_size * tensor_info_->net_in_c * tensor_info_->net_in_h * tensor_info_->net_in_w];
-            output_ptr_ = new float[tensor_info_->batch_size * tensor_info_->net_out_c * tensor_info_->net_out_l];
-            input_ptr_ = (float*)input_ptr_;
-            output_ptr_ = (float*)output_ptr_;
-        } else if (net_info->input_dtypes[0] == BM_INT8) {
-            tensor_info_->tensor_type = TensorInfo::kTensorTypeInt8;
-            input_ptr_ = new int8_t[tensor_info_->batch_size * tensor_info_->net_in_c * tensor_info_->net_in_h * tensor_info_->net_in_w];
-            output_ptr_ = new float[tensor_info_->batch_size * tensor_info_->net_out_c * tensor_info_->net_out_l];
-            input_ptr_ = (int8_t*)input_ptr_;
-            output_ptr_ = (float*)output_ptr_;
-        }
-    } else {
-        bm_image_format_ext_ bm_formate_type;
-        // if (tensor_info_->input_nchw && tensor_info_->input_rgb) {
-        //     bm_formate_type = FORMAT_RGB_PLANAR;
-        // } 
-        // if (!tensor_info_->input_nchw && tensor_info_->input_rgb) {
-        //     bm_formate_type = FORMAT_RGB_PACKED;
-        // }
-        // if (tensor_info_->input_nchw && !tensor_info_->input_rgb) {
-        //     bm_formate_type = FORMAT_BGR_PLANAR;
-        // }
-        // if (!tensor_info_->input_nchw && !tensor_info_->input_rgb) {
-        //     bm_formate_type = FORMAT_BGR_PACKED;
-        // }
-        if (tensor_info_->input_rgb) {
-            bm_formate_type = FORMAT_RGB_PLANAR;
+    // 3. Construct network's input and output space on systeam ram; Construct memory on gpu and bind them
+    input_tensors_.resize(network_meta_->input_tensor_num);
+    output_tensors_.resize(network_meta_->output_tensor_num);
+    for (int32_t i = 0; i < network_meta_->input_tensor_num; i++) {
+        const auto& tensor_meta = network_meta_->input_tensor_meta_list[i];
+        if (!USE_BMCV) {
+            if (net_info->input_dtypes[i] == BM_FLOAT32) {
+                network_meta_->tensor_type = NetworkMeta::kTensorTypeFloat32;
+                input_ptrs_.push_back(new float[tensor_meta.net_in_elements]);
+            } else if (net_info->input_dtypes[i] == BM_INT8) {
+                network_meta_->tensor_type = NetworkMeta::kTensorTypeInt8;
+                input_ptrs_.push_back(new int8_t[tensor_meta.net_in_elements]);
+            }
         } else {
-            bm_formate_type = FORMAT_BGR_PLANAR;
-        }
-        if (net_info->input_dtypes[0] == BM_FLOAT32) {
-            tensor_info_->tensor_type = TensorInfo::kTensorTypeFloat32;
-            if (!tensor_info_->input_nchw) {
-                bm_image_create(bm_handle_, tensor_info_->net_in_h, tensor_info_->net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE, &bm_mat_resized_);
-                input_ptr_ = new float[tensor_info_->batch_size * tensor_info_->net_in_c * tensor_info_->net_in_h * tensor_info_->net_in_w];
-                output_ptr_ = new float[tensor_info_->batch_size * tensor_info_->net_out_c * tensor_info_->net_out_l];
-                input_ptr_ = (float*)input_ptr_;
-                output_ptr_ = (float*)output_ptr_;
+            bm_image_format_ext_ bm_formate_type;
+            if (network_meta_->input_rgb) {
+                bm_formate_type = FORMAT_RGB_PLANAR;
             } else {
-                bm_image_create(bm_handle_, tensor_info_->net_in_h, tensor_info_->net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE, &bm_mat_resized_);
-                bm_image_create(bm_handle_, tensor_info_->net_in_h, tensor_info_->net_in_w, bm_formate_type, DATA_TYPE_EXT_FLOAT32, &bm_mat_normalized_);
-                output_ptr_ = new float[tensor_info_->batch_size * tensor_info_->net_out_c * tensor_info_->net_out_l];
+                bm_formate_type = FORMAT_BGR_PLANAR;
             }
-        } else if (net_info->input_dtypes[0] == BM_INT8) {
-            tensor_info_->tensor_type = TensorInfo::kTensorTypeInt8;
-            if (!tensor_info_->input_nchw) {
-                bm_image_create(bm_handle_, tensor_info_->net_in_h, tensor_info_->net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE, &bm_mat_resized_);
-                input_ptr_ = new int8_t[tensor_info_->batch_size * tensor_info_->net_in_c * tensor_info_->net_in_h * tensor_info_->net_in_w];
-                output_ptr_ = new float[tensor_info_->batch_size * tensor_info_->net_out_c * tensor_info_->net_out_l];
-                input_ptr_ = (int8_t*)input_ptr_;
-                output_ptr_ = (float*)output_ptr_;
-            } else {
-                bm_image_create(bm_handle_, tensor_info_->net_in_h, tensor_info_->net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE, &bm_mat_resized_);
-                bm_image_create(bm_handle_, tensor_info_->net_in_h, tensor_info_->net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE_SIGNED, &bm_mat_normalized_);
-                output_ptr_ = new float[tensor_info_->batch_size * tensor_info_->net_out_c * tensor_info_->net_out_l];
+            if (net_info->input_dtypes[i] == BM_FLOAT32) {
+                network_meta_->tensor_type = NetworkMeta::kTensorTypeFloat32;
+                if (!network_meta_->input_nchw) {
+                    bm_image_create(bm_handle_, tensor_meta.net_in_h, tensor_meta.net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE, &bm_mat_resized_);
+                    input_ptrs_.push_back(new float[tensor_meta.net_in_elements]);
+                } else {
+                    bm_image_create(bm_handle_, tensor_meta.net_in_h, tensor_meta.net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE, &bm_mat_resized_);
+                    bm_image_create(bm_handle_, tensor_meta.net_in_h, tensor_meta.net_in_w, bm_formate_type, DATA_TYPE_EXT_FLOAT32, &bm_mat_normalized_);
+                }
+            } else if (net_info->input_dtypes[i] == BM_INT8) {
+                network_meta_->tensor_type = NetworkMeta::kTensorTypeInt8;
+                if (!network_meta_->input_nchw) {
+                    bm_image_create(bm_handle_, tensor_meta.net_in_h, tensor_meta.net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE, &bm_mat_resized_);
+                    input_ptrs_.push_back(new int8_t[tensor_meta.net_in_elements]);
+                } else {
+                    bm_image_create(bm_handle_, tensor_meta.net_in_h, tensor_meta.net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE, &bm_mat_resized_);
+                    bm_image_create(bm_handle_, tensor_meta.net_in_h, tensor_meta.net_in_w, bm_formate_type, DATA_TYPE_EXT_1N_BYTE_SIGNED, &bm_mat_normalized_);
+                }
             }
         }
+        bmrt_tensor(&input_tensors_[i], p_bmrt_, net_info->input_dtypes[i], net_info->stages[0].input_shapes[i]);
     }
-
-    bmrt_tensor(&input_tensor_, p_bmrt_, net_info->input_dtypes[0], input_shape);
-    bmrt_tensor(&output_tensor_, p_bmrt_, net_info->output_dtypes[0], output_shape);
-    ConvertNormalizedParameters(tensor_info_->normalize.mean, tensor_info_->normalize.norm);
+    for (int32_t i = 0; i < network_meta_->output_tensor_num; i++) {
+        const auto& tensor_meta = network_meta_->output_tensor_meta_list[i];
+        if (net_info->output_dtypes[i] == BM_FLOAT32) {
+            output_ptrs_.push_back(new float[tensor_meta.net_out_elements]);
+        } else if (net_info->output_dtypes[i] == BM_INT8) {
+            output_ptrs_.push_back(new int8_t[tensor_meta.net_out_elements]);
+        }
+        bmrt_tensor(&output_tensors_[i], p_bmrt_, net_info->output_dtypes[i], net_info->stages[0].output_shapes[i]);
+    }
+    ConvertNormalizedParameters(network_meta_->normalize.mean, network_meta_->normalize.norm);
 
     return 1;
 }
 
 int32_t BmrunHelper::ConvertNormalizedParameters(float* mean, float* norm) {
-    float scale = tensor_info_->input_scale;
-    if (!USE_BMCV || !tensor_info_->input_nchw) {
+    // float scale = network_meta_->input_scale;
+    float scale = 1.0;
+    if (!USE_BMCV || !network_meta_->input_nchw) {
         // Convert to speede up normalization:  
         // (((src/255) - mean)/norm)*scale ----> ((src - mean*255) / (255*norm))*scale ----> (src - mean*255) * (scale/(255*norm))
         for (int32_t i = 0; i < 3; i++) {
@@ -158,18 +181,14 @@ int32_t BmrunHelper::ConvertNormalizedParameters(float* mean, float* norm) {
 }
 
 template <typename T>
-int32_t BmrunHelper::PermuateAndNormalize(T* input_ptr, uint8_t* src) {
+int32_t BmrunHelper::PermuateAndNormalize(T* input_ptr, uint8_t* src, const int32_t input_h, const int32_t input_w, const int32_t input_c) {
     // Convert NHWC to NCHW && Do normalized operation to the original input image.
-    int32_t batch_size = tensor_info_->batch_size;
-    int32_t input_h = tensor_info_->net_in_h;
-    int32_t input_w = tensor_info_->net_in_w;
-    int32_t input_c = tensor_info_->net_in_c;
-    float input_scale = tensor_info_->input_scale;
-    float* mean = tensor_info_->normalize.mean;
-    float* norm = tensor_info_->normalize.norm;
+    int32_t batch_size = network_meta_->batch_size;
+    float* mean = network_meta_->normalize.mean;
+    float* norm = network_meta_->normalize.norm;
     memset(input_ptr, 0, sizeof(T) * input_h * input_w * input_c * batch_size);
     int32_t spatial_size = input_h * input_w;
-    if (tensor_info_->input_nchw) {
+    if (network_meta_->input_nchw) {
 #pragma omp parallel for num_threads(4)
         for (int32_t c = 0; c < input_c; c++) {
             for (int32_t i = 0; i < spatial_size; i++) {
@@ -246,28 +265,28 @@ int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32
     return 1;
 }
 
-int32_t BmrunHelper::PreProcess(cv::Mat& original_img)
-{
-    SetCropAttr(original_img.cols, original_img.rows, tensor_info_->net_in_w, tensor_info_->net_in_h);
+int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
+    auto tensor_meta = network_meta_->input_tensor_meta_list[0];
+    int32_t input_h = tensor_meta.net_in_h;
+    int32_t input_w = tensor_meta.net_in_w;
+    int32_t input_c = tensor_meta.net_in_c;
+    SetCropAttr(original_img.cols, original_img.rows, tensor_meta.net_in_w, tensor_meta.net_in_h);
     if (!USE_BMCV) {
         const auto& t0 = std::chrono::steady_clock::now();
-        int32_t input_h = tensor_info_->net_in_h;
-        int32_t input_w = tensor_info_->net_in_w;
         cv::Mat sample = cv::Mat::zeros(input_w, input_h, CV_8UC3);
         cv::Mat resized_mat = sample(dst_crop_);
         cv::resize(original_img, resized_mat, resized_mat.size(), 0, 0, cv::INTER_NEAREST); // Why must assign fx and fy to enable deep copy?
-        if (tensor_info_->input_rgb) {
+        if (network_meta_->input_rgb) {
             cv::cvtColor(sample, sample, cv::COLOR_BGR2RGB);
         }
         uint8_t* src = (uint8_t*)sample.data;
         const auto& t1 = std::chrono::steady_clock::now();
-        PermuateAndNormalize((float*)input_ptr_, src);
+        PermuateAndNormalize((float*)input_ptrs_[0], src, input_h, input_w, input_c);
         const auto& t2 = std::chrono::steady_clock::now();
         std::cout << "---" << 1.0 * (t1 - t0).count() * 1e-6 << std::endl;
         std::cout << "---" << 1.0 * (t2 - t1).count() * 1e-6 << std::endl;
         return 1;
     }
-    
     else {
         const auto& t0 = std::chrono::steady_clock::now();
         bm_image original_bm_img;
@@ -302,20 +321,20 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img)
 
         // 2. Do normalization
         // Currently bmcv doesn't support normalize to nhwc format, so use cpu to normalize instead
-        if (!tensor_info_->input_nchw) {
+        if (!network_meta_->input_nchw) {
             const auto& t1 = std::chrono::steady_clock::now();
             cv::Mat cv_mat_resized;
             cv::bmcv::toMAT(&bm_mat_resized_, cv_mat_resized);
             uint8_t* src = (uint8_t*)cv_mat_resized.data;
-            PermuateAndNormalize((float*)input_ptr_, src);
+            PermuateAndNormalize((float*)input_ptrs_[0], src, input_h, input_w, input_c);
             const auto& t2 = std::chrono::steady_clock::now();
             std::cout << "---" << 1.0 * (t1 - t0).count() * 1e-6 << std::endl;
             std::cout << "---" << 1.0 * (t2 - t1).count() * 1e-6 << std::endl;
         } else {
             const auto& t1 = std::chrono::steady_clock::now();
             bmcv_convert_to_attr normalize_attr;
-            float* mean = tensor_info_->normalize.mean;
-            float* norm = tensor_info_->normalize.norm;
+            float* mean = network_meta_->normalize.mean;
+            float* norm = network_meta_->normalize.norm;
             normalize_attr.alpha_0 = norm[0];
             normalize_attr.alpha_1 = norm[1];
             normalize_attr.alpha_2 = norm[2];
@@ -333,48 +352,54 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img)
 }
 
 int32_t BmrunHelper::Inference() {
-    if (!USE_BMCV || !tensor_info_->input_nchw) {
-        // Copy the input from kernel_ram to gpu_ram.
-        bm_memcpy_s2d(bm_handle_, input_tensor_.device_mem, ((void *)input_ptr_));
-    } else {
-        // Input data is already in gpu_ram
-        bm_device_mem_t input_dev_mem;
-        bm_image_get_device_mem(bm_mat_normalized_, &input_dev_mem);
-        input_tensor_.device_mem = input_dev_mem;
+    for (int32_t i = 0; i < input_tensors_.size(); i++) {
+        if (!USE_BMCV || !network_meta_->input_nchw) {
+            // Copy the input from kernel_ram to gpu_ram.
+            bm_memcpy_s2d(bm_handle_, input_tensors_[i].device_mem, ((void *)input_ptrs_[i]));
+        } else {
+            // Input data is already in gpu_ram
+            bm_device_mem_t input_dev_mem;
+            bm_image_get_device_mem(bm_mat_normalized_, &input_dev_mem);
+            input_tensors_[i].device_mem = input_dev_mem;
+        }
     }
+
     // Command the gpu to excute inference.
-    bool ret = bmrt_launch_tensor_ex(p_bmrt_, net_names_[0], &input_tensor_, 1, &output_tensor_, 1, true, false);
+    bool ret = bmrt_launch_tensor_ex(p_bmrt_, net_names_[0], &input_tensors_[0], 1, &output_tensors_[0], 1, true, false);
     // Wait for gpu's infenernce finished.
     bm_thread_sync(bm_handle_);
+
     // Retrieve the output from gpu_ram to kernel_ram.
-    size_t size = bmrt_tensor_bytesize(&output_tensor_);
-    bm_memcpy_d2s_partial(bm_handle_, output_ptr_, output_tensor_.device_mem, size);
+    for (int32_t i = 0; i < output_tensors_.size(); i++) {
+        size_t size = bmrt_tensor_bytesize(&output_tensors_[i]);
+        bm_memcpy_d2s_partial(bm_handle_, output_ptrs_[i], output_tensors_[i].device_mem, size);
+    }
     return 1;
 }
 
 int32_t BmrunHelper::Finalize() {
-    if (!USE_BMCV) {
-        if (tensor_info_->tensor_type = TensorInfo::kTensorTypeFloat32) {
-            delete[] (float*)input_ptr_;
-            delete[] (float*)output_ptr_;
-        } else if (tensor_info_->tensor_type = TensorInfo::kTensorTypeInt8) {
-            delete[] (int8_t*)input_ptr_;
-            delete[] (float*)output_ptr_;
-        }
-    } else if (!tensor_info_->input_nchw) {
-        if (tensor_info_->tensor_type = TensorInfo::kTensorTypeFloat32) {
-            delete[] (float*)input_ptr_;
-            delete[] (float*)output_ptr_;
-            bm_image_destroy(bm_mat_resized_);
-        } else if (tensor_info_->tensor_type = TensorInfo::kTensorTypeInt8) {
-            delete[] (int8_t*)input_ptr_;
-            delete[] (float*)output_ptr_;
-            bm_image_destroy(bm_mat_resized_);
-        }
-    } else {
-        bm_image_destroy(bm_mat_resized_);
-        bm_image_destroy(bm_mat_normalized_);
-        delete[] (float*)output_ptr_;
-    }
+    // if (!USE_BMCV) {
+    //     if (network_meta_->tensor_type = NetworkMeta::kTensorTypeFloat32) {
+    //         delete[] (float*)input_ptr_;
+    //         delete[] (float*)output_ptr_;
+    //     } else if (network_meta_->tensor_type = NetworkMeta::kTensorTypeInt8) {
+    //         delete[] (int8_t*)input_ptr_;
+    //         delete[] (float*)output_ptr_;
+    //     }
+    // } else if (!network_meta_->input_nchw) {
+    //     if (network_meta_->tensor_type = NetworkMeta::kTensorTypeFloat32) {
+    //         delete[] (float*)input_ptr_;
+    //         delete[] (float*)output_ptr_;
+    //         bm_image_destroy(bm_mat_resized_);
+    //     } else if (network_meta_->tensor_type = NetworkMeta::kTensorTypeInt8) {
+    //         delete[] (int8_t*)input_ptr_;
+    //         delete[] (float*)output_ptr_;
+    //         bm_image_destroy(bm_mat_resized_);
+    //     }
+    // } else {
+    //     bm_image_destroy(bm_mat_resized_);
+    //     bm_image_destroy(bm_mat_normalized_);
+    //     delete[] (float*)output_ptr_;
+    // }
     return 1;
 }

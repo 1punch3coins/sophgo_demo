@@ -9,6 +9,8 @@
 #define MODEL_POST_ORIGIN true
 #define IDENTIFIER "road_seg"
 
+static constexpr std::array<const char*, 1> sInputNameList = {"data"};
+static constexpr std::array<const char*, 1> sOutputNameList = {"tf.identity_Softmax"};
 static constexpr float qMeanList[] = {0.0, 0.0, 0.0};
 static constexpr float qNormList[] = {1/255.0, 1/255.0, 1/255.0};
 static constexpr int32_t kOutputChannels = 4;
@@ -16,13 +18,19 @@ static constexpr int32_t kOutputHeight = 320;
 static constexpr int32_t kOutputWidth = 896;
 
 int32_t OpenvinoRoadseg::Initialize(const std::string& model) {
-    TensorInfo* p_info = new TensorInfo(TensorInfo::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
+    NetworkMeta* p_info = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
     p_info->normalize.mean[0] = qMeanList[0];
     p_info->normalize.mean[1] = qMeanList[1];
     p_info->normalize.mean[2] = qMeanList[2];
     p_info->normalize.norm[0] = qNormList[0];
     p_info->normalize.norm[1] = qNormList[1];
     p_info->normalize.norm[2] = qNormList[2];
+    for (const auto& input_name : sInputNameList) {
+        p_info->AddInputTensorMeta(input_name);
+    }
+    for (const auto& output_name : sOutputNameList) {
+        p_info->AddOutputTensorMeta(output_name);
+    }
     bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeRoadSeg, p_info));
 
     if (!bmrun_helper_) {
