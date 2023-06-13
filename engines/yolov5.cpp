@@ -26,14 +26,14 @@ static float constexpr AnchorHeightList[] = {1.0};
 #endif
 
 int32_t Yolov5::Initialize(const std::string& model) {
-    NetworkMeta* p_info = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
-    p_info->normalize.mean[0] = qMeanList[0];
-    p_info->normalize.mean[1] = qMeanList[1];
-    p_info->normalize.mean[2] = qMeanList[2];
-    p_info->normalize.norm[0] = qNormList[0];
-    p_info->normalize.norm[1] = qNormList[1];
-    p_info->normalize.norm[2] = qNormList[2];
-    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeDet, p_info));
+    NetworkMeta* p_meta = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
+    p_meta->normalize.mean[0] = qMeanList[0];
+    p_meta->normalize.mean[1] = qMeanList[1];
+    p_meta->normalize.mean[2] = qMeanList[2];
+    p_meta->normalize.norm[0] = qNormList[0];
+    p_meta->normalize.norm[1] = qNormList[1];
+    p_meta->normalize.norm[2] = qNormList[2];
+    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeDet, p_meta));
 
     if (!bmrun_helper_) {
         return 0;

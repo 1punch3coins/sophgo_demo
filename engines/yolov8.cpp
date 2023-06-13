@@ -30,20 +30,20 @@ static constexpr int32_t kOutputChannels = 2 + 4;
 static int32_t OutputSpatialSize = 0;
 
 int32_t Yolov8::Initialize(const std::string& model) {
-    NetworkMeta* p_info = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC, kInputTensorNum, kOutputTensorNum);
-    p_info->normalize.mean[0] = qMeanList[0];
-    p_info->normalize.mean[1] = qMeanList[1];
-    p_info->normalize.mean[2] = qMeanList[2];
-    p_info->normalize.norm[0] = qNormList[0];
-    p_info->normalize.norm[1] = qNormList[1];
-    p_info->normalize.norm[2] = qNormList[2];
+    NetworkMeta* p_meta = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC, kInputTensorNum, kOutputTensorNum);
+    p_meta->normalize.mean[0] = qMeanList[0];
+    p_meta->normalize.mean[1] = qMeanList[1];
+    p_meta->normalize.mean[2] = qMeanList[2];
+    p_meta->normalize.norm[0] = qNormList[0];
+    p_meta->normalize.norm[1] = qNormList[1];
+    p_meta->normalize.norm[2] = qNormList[2];
     for (const auto& input_name : sInputNameList) {
-        p_info->AddInputTensorMeta(input_name);
+        p_meta->AddInputTensorMeta(input_name);
     }
     for (const auto& output_name : sOutputNameList) {
-        p_info->AddOutputTensorMeta(output_name);
+        p_meta->AddOutputTensorMeta(output_name);
     }
-    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeDet, p_info));
+    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeDet, p_meta));
 
     if (!bmrun_helper_) {
         return 0;
@@ -118,7 +118,7 @@ void Yolov8::GetBoxPerLevel(const float* data_ptr, int32_t& index, const int32_t
 }
 
 int32_t Yolov8::Process(cv::Mat& original_mat, Result& result) {
-    // 1. prep-rocess
+    // 1. pre-process
     const auto& t_pre_process0 = std::chrono::steady_clock::now();
     int32_t original_w = original_mat.cols;
     int32_t original_h = original_mat.rows;

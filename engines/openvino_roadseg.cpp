@@ -13,25 +13,25 @@ static constexpr std::array<const char*, 1> sInputNameList = {"data"};
 static constexpr std::array<const char*, 1> sOutputNameList = {"tf.identity_Softmax"};
 static constexpr float qMeanList[] = {0.0, 0.0, 0.0};
 static constexpr float qNormList[] = {1/255.0, 1/255.0, 1/255.0};
-static constexpr int32_t kOutputChannels = 4;
+static constexpr int32_t kOutputChannelNum = 4;
 static constexpr int32_t kOutputHeight = 320;
 static constexpr int32_t kOutputWidth = 896;
 
 int32_t OpenvinoRoadseg::Initialize(const std::string& model) {
-    NetworkMeta* p_info = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
-    p_info->normalize.mean[0] = qMeanList[0];
-    p_info->normalize.mean[1] = qMeanList[1];
-    p_info->normalize.mean[2] = qMeanList[2];
-    p_info->normalize.norm[0] = qNormList[0];
-    p_info->normalize.norm[1] = qNormList[1];
-    p_info->normalize.norm[2] = qNormList[2];
+    NetworkMeta* p_meta = new NetworkMeta(NetworkMeta::kTensorTypeFloat32, INPUT_NCHW, INPUT_RGB, OUTPUT_NLC);
+    p_meta->normalize.mean[0] = qMeanList[0];
+    p_meta->normalize.mean[1] = qMeanList[1];
+    p_meta->normalize.mean[2] = qMeanList[2];
+    p_meta->normalize.norm[0] = qNormList[0];
+    p_meta->normalize.norm[1] = qNormList[1];
+    p_meta->normalize.norm[2] = qNormList[2];
     for (const auto& input_name : sInputNameList) {
-        p_info->AddInputTensorMeta(input_name);
+        p_meta->AddInputTensorMeta(input_name);
     }
     for (const auto& output_name : sOutputNameList) {
-        p_info->AddOutputTensorMeta(output_name);
+        p_meta->AddOutputTensorMeta(output_name);
     }
-    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeRoadSeg, p_info));
+    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeRoadSeg, p_meta));
 
     if (!bmrun_helper_) {
         return 0;
@@ -43,7 +43,7 @@ int32_t OpenvinoRoadseg::Initialize(const std::string& model) {
         return 0;
     }
 
-    if (bmrun_helper_->GetOutputChannelNum() != kOutputChannels) {
+    if (bmrun_helper_->GetOutputChannelNum() != kOutputChannelNum) {
         std::cout << "output channel size mismatched" << std::endl;
         return 0;
     }
@@ -79,8 +79,8 @@ int32_t OpenvinoRoadseg::Process(cv::Mat& original_mat, Result& result) {
 #pragma omp parallel for num_threads(4)
     for (int32_t y = 0; y < kOutputHeight; y++) {
         for (int32_t x = 0; x < kOutputWidth; x++) {
-            // float* scores = &output[y * (kOutputWidth * kOutputChannels) + x * kOutputChannels + 0];
-            float* scores = output + y * (kOutputWidth * kOutputChannels) + x * kOutputChannels + 0;
+            // float* scores = &output[y * (kOutputWidth * kOutputChannelNum) + x * kOutputChannelNum + 0];
+            float* scores = output + y * (kOutputWidth * kOutputChannelNum) + x * kOutputChannelNum + 0;
             uint8_t b, g, r;
             if (scores[0] > 0.7 && scores[1] < 0.3 && scores[2] < 0.3 && scores[3] < 0.3) {
                 b = 0;

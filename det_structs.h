@@ -21,6 +21,14 @@ struct Bbox2D {
     {}
 };
 
+struct Point2D {
+    int32_t x;
+    int32_t y;
+    Point2D(int32_t x_, int32_t y_):
+        x(x_), y(y_)
+    {}
+};
+
 struct PointXYZRGB {
     float x;
     float y;
@@ -30,10 +38,10 @@ struct PointXYZRGB {
     int32_t b;
 };
 
-struct Point2D {
-    int32_t x;
-    int32_t y;
-};
+// struct Lane2D {
+//     std::vector<Point2D> lane_points;
+// };
+typedef std::vector<Point2D> Lane2D ;
 
 struct SegObj {
     int32_t label;

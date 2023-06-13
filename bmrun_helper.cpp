@@ -8,11 +8,11 @@
 
 #define USE_BMCV true
 
-BmrunHelper* BmrunHelper::Create(const std::string& model, int32_t task_id, NetworkMeta* p_info) {
+BmrunHelper* BmrunHelper::Create(const std::string& model, int32_t task_id, NetworkMeta* p_meta) {
     BmrunHelper*p = new BmrunHelper();
     p->model_pwd_ = model.c_str();
     p->task_ = task_id;
-    p->network_meta_.reset(p_info);
+    p->network_meta_.reset(p_meta);
     return p;
 }
 
@@ -42,7 +42,7 @@ int32_t BmrunHelper::Initialize() {
         network_meta_->output_name2index.insert({network_meta_->output_tensor_meta_list[i].tensor_name, i});
     }
 
-    // 2.1 readin model's input metadata // if input meta's sort and network's tensor sort not matched, TO DO
+    // 2.1 readin model's input metadata // if input meta's order and network's tensor order not matched, TO DO
     char const** input_names = net_info->input_names;
     for (auto& input_tensor_meta : network_meta_->input_tensor_meta_list) {
         int32_t index = 0;
@@ -60,12 +60,12 @@ int32_t BmrunHelper::Initialize() {
             input_tensor_meta.net_in_w = input_shape.dims[2];
             input_tensor_meta.net_in_c = input_shape.dims[3];
         }
+        network_meta_->batch_size = input_shape.dims[0];
         input_tensor_meta.input_scale = net_info->input_scales[index];
         input_tensor_meta.net_in_elements = network_meta_->batch_size * input_tensor_meta.net_in_c * input_tensor_meta.net_in_h * input_tensor_meta.net_in_w;
-        network_meta_->batch_size = input_shape.dims[0];
     }
 
-    // 2.2 Readin model's output metadata // if output meta's sort and network's tensor sort not matched, TO DO
+    // 2.2 Readin model's output metadata // if output meta's order and network's tensor order not matched, TO DO
     char const** output_names = net_info->output_names;
     for (auto& output_tensor_meta : network_meta_->output_tensor_meta_list) {
         int32_t index = 0;
@@ -170,12 +170,12 @@ int32_t BmrunHelper::ConvertNormalizedParameters(float* mean, float* norm) {
     } else {
         // Convert to match linear transformation:
         // (((src/255) - mean)/norm)*scale ----> src*scale/(255*norm) - mean*scale/norm ----> src*(scale/(255*norm)) - mean*scale/norm
-        norm[0] = scale / (norm[0] * 255.0);
-        norm[1] = scale / (norm[1] * 255.0);
-        norm[2] = scale / (norm[2] * 255.0);
         mean[0] = 0 - mean[0] * scale / norm[0];
         mean[1] = 0 - mean[1] * scale / norm[1];
         mean[2] = 0 - mean[2] * scale / norm[2];
+        norm[0] = scale / (norm[0] * 255.0);
+        norm[1] = scale / (norm[1] * 255.0);
+        norm[2] = scale / (norm[2] * 255.0);
     }
     return 1;
 }
@@ -218,6 +218,16 @@ int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32
         dst_crop_.width = dst_w;
         dst_crop_.height = dst_h;
         return 1;
+    }
+    if (task_ == kTaskTypeLaneDet) {
+        src_crop_.x = 0;
+        src_crop_.y = src_h / 2 - 100;
+        src_crop_.width = src_w;
+        src_crop_.height = src_h - src_crop_.y;
+        dst_crop_.x = 0;
+        dst_crop_.y = 0;
+        dst_crop_.width = dst_w;
+        dst_crop_.height = dst_h;
     }
     if (task_ == kTaskTypeRoadSeg) {
         float src_ratio = 1.0 * src_h / src_w;
@@ -273,9 +283,10 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
     SetCropAttr(original_img.cols, original_img.rows, tensor_meta.net_in_w, tensor_meta.net_in_h);
     if (!USE_BMCV) {
         const auto& t0 = std::chrono::steady_clock::now();
-        cv::Mat sample = cv::Mat::zeros(input_w, input_h, CV_8UC3);
+        cv::Mat sample = cv::Mat::zeros(input_h, input_w, CV_8UC3);
         cv::Mat resized_mat = sample(dst_crop_);
-        cv::resize(original_img, resized_mat, resized_mat.size(), 0, 0, cv::INTER_NEAREST); // Why must assign fx and fy to enable deep copy?
+        cv::resize(original_img(src_crop_), resized_mat, resized_mat.size(), 0, 0, cv::INTER_NEAREST); // Why must assign fx and fy to enable deep copy?
+        cv::imwrite("./output.jpg", sample);
         if (network_meta_->input_rgb) {
             cv::cvtColor(sample, sample, cv::COLOR_BGR2RGB);
         }
@@ -292,8 +303,8 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
         bm_image original_bm_img;
         cv::bmcv::toBMI(original_img, &original_bm_img);
 
-        // 1. Do crop and resize
-        if (task_ == kTaskTypeSeg || task_ == kTaskTypeRoadSeg) {
+        // 1. Do crop and resize & convert color channel and permute
+        if (task_ == kTaskTypeSeg || task_ == kTaskTypeRoadSeg || task_ == kTaskTypeLaneDet) {
             bmcv_rect src_crop;
             src_crop.start_x = src_crop_.x;
             src_crop.start_y = src_crop_.y;
@@ -318,6 +329,9 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
             resize_padding_attr.if_memset = 1;
             bmcv_image_vpp_convert_padding(bm_handle_, 1, original_bm_img, &bm_mat_resized_, &resize_padding_attr, &src_crop);
         }
+        cv::Mat cv_mat_resized;
+        cv::bmcv::toMAT(&bm_mat_resized_, cv_mat_resized);
+        cv::imwrite("./output.jpg", cv_mat_resized);
 
         // 2. Do normalization
         // Currently bmcv doesn't support normalize to nhwc format, so use cpu to normalize instead
@@ -326,7 +340,7 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
             cv::Mat cv_mat_resized;
             cv::bmcv::toMAT(&bm_mat_resized_, cv_mat_resized);
             uint8_t* src = (uint8_t*)cv_mat_resized.data;
-            PermuateAndNormalize((float*)input_ptrs_[0], src, input_h, input_w, input_c);
+            PermuateAndNormalize((float*)input_ptrs_[0], src, input_h, input_w, input_c); // Might cause bug
             const auto& t2 = std::chrono::steady_clock::now();
             std::cout << "---" << 1.0 * (t1 - t0).count() * 1e-6 << std::endl;
             std::cout << "---" << 1.0 * (t2 - t1).count() * 1e-6 << std::endl;
@@ -352,6 +366,7 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
 }
 
 int32_t BmrunHelper::Inference() {
+    // Prepare input data
     for (int32_t i = 0; i < input_tensors_.size(); i++) {
         if (!USE_BMCV || !network_meta_->input_nchw) {
             // Copy the input from kernel_ram to gpu_ram.
@@ -365,7 +380,7 @@ int32_t BmrunHelper::Inference() {
     }
 
     // Command the gpu to excute inference.
-    bool ret = bmrt_launch_tensor_ex(p_bmrt_, net_names_[0], &input_tensors_[0], 1, &output_tensors_[0], 1, true, false);
+    bool ret = bmrt_launch_tensor_ex(p_bmrt_, net_names_[0], &input_tensors_[0], network_meta_->input_tensor_num, &output_tensors_[0], network_meta_->output_tensor_num, true, false);
     // Wait for gpu's infenernce finished.
     bm_thread_sync(bm_handle_);
 

@@ -11,6 +11,7 @@
 enum {
     kTaskTypeDet,
     kTaskTypeSeg,
+    kTaskTypeLaneDet,
     kTaskTypeRoadSeg,
 };
 
