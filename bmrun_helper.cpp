@@ -221,7 +221,7 @@ int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32
     }
     if (task_ == kTaskTypeLaneDet) {
         src_crop_.x = 0;
-        src_crop_.y = src_h / 2 - 100;
+        src_crop_.y = src_h * 0.4;
         src_crop_.width = src_w;
         src_crop_.height = src_h - src_crop_.y;
         dst_crop_.x = 0;

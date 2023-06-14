@@ -57,7 +57,7 @@ int32_t UfLanedetv2::Initialize(const std::string& model_pwd) {
             std::cout << "output channel size mismatched" << std::endl;
             return 0;
         }
-        if (output_name == "loc_row") {
+        if (output_name == sOutputNameList[0]) {
             if (bmrun_helper_->GetOutputHeight(output_name) != kOutputRowAnchorNum) {
                 std::cout << "output height size mismatched" << std::endl;
                 return 0;
@@ -68,14 +68,14 @@ int32_t UfLanedetv2::Initialize(const std::string& model_pwd) {
             }
             continue;
         }
-        if (output_name == "exist_row") {
+        if (output_name == sOutputNameList[2]) {
             if (bmrun_helper_->GetOutputWidth(output_name) != kOutputRowNum) {
                 std::cout << "output width size mismatched" << std::endl;
                 return 0;
             }
             continue;
         }
-        if (output_name == "loc_col") {
+        if (output_name == sOutputNameList[1]) {
             if (bmrun_helper_->GetOutputHeight(output_name) != kOutputColAnchorNum) {
                 std::cout << "output height size mismatched" << std::endl;
                 return 0;
@@ -86,7 +86,7 @@ int32_t UfLanedetv2::Initialize(const std::string& model_pwd) {
             }
             continue;
         }
-        if (output_name == "exist_col") {
+        if (output_name == sOutputNameList[3]) {
             if (bmrun_helper_->GetOutputWidth(output_name) != kOutputColNum) {
                 std::cout << "output width size mismatched" << std::endl;
                 return 0;
@@ -123,8 +123,8 @@ int32_t UfLanedetv2::DoSoftmax(const std::vector<float>& input, std::vector<floa
 int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
     // 1. pre-process
     const auto& t_pre_process0 = std::chrono::steady_clock::now();
-    int32_t original_w = original_mat.cols;
-    int32_t original_h = original_mat.rows;
+    int32_t original_width = original_mat.cols;
+    int32_t original_height = original_mat.rows;
     bmrun_helper_->PreProcess(original_mat);
     cv::Rect src_crop = bmrun_helper_->GetCropInfo().first;
     const auto& t_pre_process1 = std::chrono::steady_clock::now();
@@ -155,7 +155,7 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
     // 3.2 post-process, scan the output "loc_row" vertically
     std::vector<std::vector<std::pair<float, float>>> scanned_lanes_poses(kOutputChannelNum);
     offset_row = kOutputRowNum * kOutputChannelNum;
-    float scale_width = static_cast<float>(original_w) / (kOutputRowAnchorNum - 1);
+    float scale_width = static_cast<float>(original_width) / (kOutputRowAnchorNum - 1);  // Haven't figured out why use original_width diretly
     float scale_height = static_cast<float>(src_crop.height) / kOutputRowNum;
     // loop for each lane scanned by row
     for (const auto& lane_index : kRowLaneList) {
@@ -175,7 +175,7 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
                     }
                 }
                 float avg_col_pos;
-                // do avg weighted locs
+                // calculate softmax-weighted locs
                 if (max_conf_index > 1 && max_conf_index < kOutputRowAnchorNum - 1) {
                     float pre_anchor_conf = loc_row[start_index + (max_conf_index - 1) * offset_row];
                     float post_anchor_conf = loc_row[start_index + (max_conf_index + 1) * offset_row];
@@ -186,8 +186,8 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
                 } else {
                     avg_col_pos = max_conf_index;
                 }
-                int32_t scaled_x = static_cast<float>(avg_col_pos * scale_width) + src_crop.x;
-                int32_t scaled_y = static_cast<float>(row_position * scale_height) + src_crop.y;
+                int32_t scaled_x = static_cast<int32_t>(avg_col_pos * scale_width);
+                int32_t scaled_y = static_cast<int32_t>(row_position * scale_height) + src_crop.y;
                 scanned_lanes_poses[lane_index].push_back(std::pair<float, float>(avg_col_pos, row_position));
                 result.lanes[lane_index].push_back(Point2D(scaled_x, scaled_y));
             }
@@ -197,7 +197,7 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
     // 3.3 post-process, scan the output "loc_col" horizontally
     offset_col = kOutputColNum * kOutputChannelNum;
     scale_width = static_cast<float>(src_crop.width) / kOutputColNum;
-    scale_height = static_cast<float>(original_h) / (kOutputColAnchorNum - 1);
+    scale_height = static_cast<float>(original_height) / (kOutputColAnchorNum - 1); // Haven't figured out why use original_height diretly
     // loop for each lane scanned by col
     for (const auto& lane_index : kColLaneList) {
         // if the lane has enough valid points scanned by col
@@ -216,10 +216,10 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
                     }
                 }
                 float avg_row_pos;
-                // do avg weighted locs
-                if (max_conf_index > 1 && max_conf_index < kOutputRowAnchorNum - 1) {
-                    float pre_anchor_conf = loc_col[start_index + (max_conf_index - 1) * offset_row];
-                    float post_anchor_conf = loc_col[start_index + (max_conf_index + 1) * offset_row];
+                // calculate softmax-weighted locs
+                if (max_conf_index > 1 && max_conf_index < kOutputColAnchorNum - 1) {
+                    float pre_anchor_conf = loc_col[start_index + (max_conf_index - 1) * offset_col];
+                    float post_anchor_conf = loc_col[start_index + (max_conf_index + 1) * offset_col];
                     std::vector<float> input = {pre_anchor_conf, max_confidence, post_anchor_conf};
                     std::vector<float> weight;
                     DoSoftmax(input, weight);
@@ -227,29 +227,13 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
                 } else {
                     avg_row_pos = max_conf_index;
                 }
-                int32_t scaled_x = static_cast<float>(avg_row_pos * scale_width) + src_crop.x;
-                int32_t scaled_y = static_cast<float>(col_position * scale_height) + src_crop.y;
+                int32_t scaled_x = static_cast<int32_t>(col_position * scale_width) + src_crop.x;
+                int32_t scaled_y = static_cast<int32_t>(avg_row_pos * scale_height);
                 scanned_lanes_poses[lane_index].push_back(std::pair<float, float>(col_position, avg_row_pos));
                 result.lanes[lane_index].push_back(Point2D(scaled_x, scaled_y));
             }
         }
     }
-
-    // 3.4 post-process, rescale the lane points
-    // int32_t valid_lane_num = 0;
-    // for (int32_t i = 0; i < kOutputChannelNum; i++) {
-    //     if (scanned_lanes_poses[i].size() > 0) {
-    //         valid_lane_num++;
-    //         result.lanes.resize(valid_lane_num);
-    //         result.lanes[valid_lane_num-1].first.reserve(40);
-    //         result.lanes[valid_lane_num-1].second = i;
-    //         for (const auto& scanned_lane_point : scanned_lanes_poses[i]) {
-    //             int32_t scaled_x = static_cast<int32_t>(scanned_lane_point.first * (scale_width));
-    //             int32_t scaled_y = static_cast<int32_t>(scanned_lane_point.second * (scale_height)) + src_crop.y;
-    //             result.lanes[valid_lane_num-1].first.push_back(Point2D(scaled_x, scaled_y));
-    //         }
-    //     }
-    // }
 
     const auto& t_post_process1 = std::chrono::steady_clock::now();
     std::cout << "pre-process: " << std::setw(8) << 1.0 * (t_pre_process1 - t_pre_process0).count() * 1e-6   << " ms" << std::endl;
