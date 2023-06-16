@@ -1,7 +1,8 @@
 #include <iostream>
-#include <opencv2/opencv.hpp>
+#include <fstream>
 #include <chrono>
 #include <algorithm>
+#include <opencv2/opencv.hpp>
 #include "yolov8.h"
 
 #define INPUT_NCHW true
@@ -48,29 +49,42 @@ int32_t Yolov8::Initialize(const std::string& model) {
     if (!bmrun_helper_) {
         return 0;
     }
-
     if (bmrun_helper_->Initialize() != 1) {
         std::cout << "bmrun_helper initialization failed" << std::endl;
         bmrun_helper_.reset();
         return 0;
     }
 
+    // Check output tensor meta
     if (bmrun_helper_->GetOutputChannelNum() != kOutputChannels) {
         std::cout << "output channel size mismatched" << std::endl;
         return 0;
     }
-
     for (const auto& grid_scale : kGridScaleList) {
         OutputSpatialSize += (bmrun_helper_->GetInputWidth() / grid_scale) * (bmrun_helper_->GetInputHeight() / grid_scale);
     }
     OutputSpatialSize *= kElmentAnchorNum;
-
     if (bmrun_helper_->GetOutputLength() != OutputSpatialSize) {
         std::cout << "output spatial size mismatched" << std::endl;
         return 0;
     }
 
+    ReadClaNames("./inputs/label_coco_80.txt");
 
+    return 1;
+}
+
+int32_t Yolov8::ReadClaNames(const std::string& filename) {
+    std::ifstream ifs(filename);
+    if (ifs.fail()) {
+        std::cout << "failed to read " << filename << std::endl;
+        return 0;
+    }
+    cls_names_.clear();
+    std::string str;
+    while (getline(ifs, str)) {
+        cls_names_.push_back(str);
+    }
     return 1;
 }
 
@@ -109,7 +123,8 @@ void Yolov8::GetBoxPerLevel(const float* data_ptr, int32_t& index, const int32_t
                 int32_t h = static_cast<int32_t>(data_ptr[index + 3] * scale_h);
                 int32_t x = cx - w / 2;
                 int32_t y = cy - h / 2;
-                bbox_list.push_back(Bbox2D(cls_id, cls_confidence, x, y, w, h));
+                std::string cls_name = cls_names_[cls_id];
+                bbox_list.push_back(Bbox2D(cls_id, cls_name, cls_confidence, x, y, w, h));
             }
             index += kOutputChannels;
 #endif

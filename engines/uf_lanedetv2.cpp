@@ -45,13 +45,13 @@ int32_t UfLanedetv2::Initialize(const std::string& model_pwd) {
     if (!bmrun_helper_) {
         return 0;
     }
-
     if (bmrun_helper_->Initialize() != 1) {
         std::cout << "bmrun_helper initialization failed" << std::endl;
         bmrun_helper_.reset();
         return 0;
     }
 
+    // Check output tensor meta
     for (const auto& output_name : sOutputNameList) {
         if (bmrun_helper_->GetOutputChannelNum(output_name) != kOutputChannelNum) {
             std::cout << "output channel size mismatched" << std::endl;
@@ -94,12 +94,24 @@ int32_t UfLanedetv2::Initialize(const std::string& model_pwd) {
         }
     }
 
+    // Prepare cached vectors
     valid_lanes_rows_.resize(kOutputChannelNum);
     valid_lanes_cols_.resize(kOutputChannelNum);
+    scanned_lanes_poses_.resize(kOutputChannelNum);
     for (int32_t i = 0; i < kOutputChannelNum; i++) {
         valid_lanes_rows_[i].reserve(50);
         valid_lanes_cols_[i].reserve(50);
+        scanned_lanes_poses_[i].reserve(50);
     }
+    cached_row_anchor_norms_.resize(kOutputRowAnchorNum);
+    cached_col_anchor_norms_.resize(kOutputColAnchorNum);
+    for (int32_t i = 0; i < cached_row_anchor_norms_.size(); i++) {
+        cached_row_anchor_norms_[i] = 0.42 + i * (1.0 - 0.42) / (kOutputRowNum - 1);
+    }
+    for (int32_t i = 0; i < cached_col_anchor_norms_.size(); i++) {
+        cached_col_anchor_norms_[i] = 0.0 + i * (1.0 - 0.0) / (kOutputColNum - 1);
+    }
+
     return 1;
 }
 
@@ -132,7 +144,7 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
     // 2. inference
     bmrun_helper_->Inference();
 
-    // 3.1 post-process, retrive outputs
+    // 3.1 post-process, retrive outputs & do argmax to get valid rows and cols
     const auto& t_post_process0 = std::chrono::steady_clock::now();
     float* loc_row = bmrun_helper_->GetInfernceOutput(sOutputNameList[0]);
     float* loc_col = bmrun_helper_->GetInfernceOutput(sOutputNameList[1]);
@@ -153,17 +165,14 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
     }
 
     // 3.2 post-process, scan the output "loc_row" vertically
-    std::vector<std::vector<std::pair<float, float>>> scanned_lanes_poses(kOutputChannelNum);
     offset_row = kOutputRowNum * kOutputChannelNum;
-    float scale_width = static_cast<float>(original_width) / (kOutputRowAnchorNum - 1);  // Haven't figured out why use original_width diretly
-    float scale_height = static_cast<float>(src_crop.height) / kOutputRowNum;
     // loop for each lane scanned by row
     for (const auto& lane_index : kRowLaneList) {
         // if the lane has enough valid points scanned by row
         if (valid_lanes_rows_[lane_index].size() > kOutputRowNum / 2) {
             // loop for every valid row
-            for (const auto& row_position : valid_lanes_rows_[lane_index]) {
-                int32_t start_index = row_position * kOutputChannelNum + lane_index;
+            for (const auto& row_pos : valid_lanes_rows_[lane_index]) {
+                int32_t start_index = row_pos * kOutputChannelNum + lane_index;
                 int32_t max_conf_index = 0;
                 float max_confidence = 0;
                 // loop for every anchor
@@ -186,25 +195,22 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
                 } else {
                     avg_col_pos = max_conf_index;
                 }
-                int32_t scaled_x = static_cast<int32_t>(avg_col_pos * scale_width);
-                int32_t scaled_y = static_cast<int32_t>(row_position * scale_height) + src_crop.y;
-                scanned_lanes_poses[lane_index].push_back(std::pair<float, float>(avg_col_pos, row_position));
-                result.lanes[lane_index].push_back(Point2D(scaled_x, scaled_y));
+                float normed_x = avg_col_pos / (kOutputRowAnchorNum - 1);
+                float normed_y = cached_row_anchor_norms_[row_pos];  // I don't know why here start at 0.42 at y, but there start at 0.0
+                scanned_lanes_poses_[lane_index].push_back(std::pair<float, float>(normed_x, normed_y));
             }
         }
     }
 
     // 3.3 post-process, scan the output "loc_col" horizontally
     offset_col = kOutputColNum * kOutputChannelNum;
-    scale_width = static_cast<float>(src_crop.width) / kOutputColNum;
-    scale_height = static_cast<float>(original_height) / (kOutputColAnchorNum - 1); // Haven't figured out why use original_height diretly
     // loop for each lane scanned by col
     for (const auto& lane_index : kColLaneList) {
         // if the lane has enough valid points scanned by col
         if (valid_lanes_cols_[lane_index].size() > kOutputColNum / 4) {
             // loop for every valid col
-            for (const auto& col_position : valid_lanes_cols_[lane_index]) {
-                int32_t start_index = col_position * kOutputChannelNum + lane_index;
+            for (const auto& col_pos : valid_lanes_cols_[lane_index]) {
+                int32_t start_index = col_pos * kOutputChannelNum + lane_index;
                 int32_t max_conf_index = 0;
                 float max_confidence = 0;
                 // loop for every anchor
@@ -227,12 +233,28 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
                 } else {
                     avg_row_pos = max_conf_index;
                 }
-                int32_t scaled_x = static_cast<int32_t>(col_position * scale_width) + src_crop.x;
-                int32_t scaled_y = static_cast<int32_t>(avg_row_pos * scale_height);
-                scanned_lanes_poses[lane_index].push_back(std::pair<float, float>(col_position, avg_row_pos));
-                result.lanes[lane_index].push_back(Point2D(scaled_x, scaled_y));
+                float normed_x = cached_col_anchor_norms_[col_pos];
+                float normed_y = avg_row_pos / (kOutputColAnchorNum - 1);   // I don't know why here start at 0.0 at y, but there start at 4.2
+                scanned_lanes_poses_[lane_index].push_back(std::pair<float, float>(normed_x, normed_y));
             }
         }
+    }
+
+    // 3.4 post-process, rescale the lane points
+    // The official implementation
+    // https://github.com/cfzd/Ultra-Fast-Lane-Detection-v2/blob/master/demo.py#L40
+    for (int32_t i = 0; i < scanned_lanes_poses_.size(); i++) {
+        for (const auto& lane_point : scanned_lanes_poses_[i]) {
+            int32_t scaled_x = static_cast<int32_t>(lane_point.first * original_width);
+            int32_t scaled_y = static_cast<int32_t>(lane_point.second * original_height);
+            result.lanes[i].push_back(Point2D(scaled_x, scaled_y));
+        }
+    }
+
+    for (int32_t i = 0; i < kOutputChannelNum; i++) {
+        valid_lanes_rows_[i].clear();
+        valid_lanes_cols_[i].clear();
+        scanned_lanes_poses_[i].clear();
     }
 
     const auto& t_post_process1 = std::chrono::steady_clock::now();

@@ -12,7 +12,7 @@
 #include <chrono>
 
 int main(int argc, char* argv[]) {
-    cv::Mat original_img = cv::imread("./inputs/test2.png");
+    cv::Mat original_img = cv::imread("./inputs/test1.png");
     Yolov8 yolo;
     if (yolo.Initialize("./models/yolov8s_post_1684x_fp16.bmodel") != 1) {
         std::cout << "yolo initialization uncompleted" << std::endl;
@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     UfLanedetv2 uf_lanedet;
-    if (uf_lanedet.Initialize("./models/ufld_v2_r18_culane_1684x_fp16.bmodel") != 1) {
+    if (uf_lanedet.Initialize("./models/ufldv2_r18_320x1600_1684x_fp16.bmodel") != 1) {
         std::cout << "lane_det initialization uncompleted" << std::endl;
         return 0;
     }
@@ -36,7 +36,6 @@ int main(int argc, char* argv[]) {
             std::cout << "roadseg forward uncompleted" << std::endl;
         }
         cv::add(original_img, seg_res.output_mat, res_img);
-        cv::imwrite("./outputs/output1.jpg", original_img);
 
         Yolov8::Result det_res;
         if (yolo.Process(original_img, det_res) != 1) {
@@ -44,7 +43,7 @@ int main(int argc, char* argv[]) {
             return 0;
         }
         for (const auto& box: det_res.bbox_list) {
-            cv::putText(res_img, std::to_string(box.cls_id), cv::Point(box.x, box.y - 6), 0, 0.5, cv::Scalar(0, 255, 0), 1);
+            cv::putText(res_img, box.cls_name, cv::Point(box.x, box.y - 6), 0, 0.8, cv::Scalar(0, 255, 0), 2);
             cv::rectangle(res_img, cv::Rect(box.x, box.y, box.w, box.h), cv::Scalar(0, 255, 0), 2);
         }
 

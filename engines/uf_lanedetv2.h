@@ -24,8 +24,13 @@ public:
     int32_t Process(cv::Mat& original_mat, Result& result);
     
 private:
-    int32_t DoSoftmax(const std::vector<float>& input, std::vector<float>& output);
     std::unique_ptr<BmrunHelper> bmrun_helper_;
+
+private:
+    int32_t DoSoftmax(const std::vector<float>& input, std::vector<float>& output);
+    std::vector<float> cached_row_anchor_norms_;
+    std::vector<float> cached_col_anchor_norms_;
     std::vector<std::vector<int32_t>> valid_lanes_rows_;
     std::vector<std::vector<int32_t>> valid_lanes_cols_;
+    std::vector<std::vector<std::pair<float, float>>> scanned_lanes_poses_;
 };

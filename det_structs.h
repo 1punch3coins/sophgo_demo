@@ -6,6 +6,7 @@
 
 struct Bbox2D {
     int32_t cls_id;
+    std::string cls_name;
     float cls_confidence;
 
     int32_t x;
@@ -18,6 +19,9 @@ struct Bbox2D {
     {}
     Bbox2D(int32_t cls_id_, float cls_confidence_, int32_t x_, int32_t y_, int32_t w_, int32_t h_):
         cls_id(cls_id_), cls_confidence(cls_confidence_), x(x_), y(y_), w(w_), h(h_)
+    {}
+    Bbox2D(int32_t cls_id_, std::string cls_name_, float cls_confidence_, int32_t x_, int32_t y_, int32_t w_, int32_t h_):
+        cls_id(cls_id_), cls_name(cls_name_), cls_confidence(cls_confidence_), x(x_), y(y_), w(w_), h(h_)
     {}
 };
 

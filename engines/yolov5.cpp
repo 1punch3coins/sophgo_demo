@@ -1,7 +1,8 @@
 #include <iostream>
-#include <opencv2/opencv.hpp>
+#include <fstream>
 #include <chrono>
 #include <algorithm>
+#include <opencv2/opencv.hpp>
 #include "yolov5.h"
 
 #define INPUT_NCHW true
@@ -38,29 +39,42 @@ int32_t Yolov5::Initialize(const std::string& model) {
     if (!bmrun_helper_) {
         return 0;
     }
-
     if (bmrun_helper_->Initialize() != 1) {
         std::cout << "bmrun_helper initialization failed" << std::endl;
         bmrun_helper_.reset();
         return 0;
     }
 
+    // Check output tensor meta
     if (bmrun_helper_->GetOutputChannelNum() != kOutputChannels) {
         std::cout << "output channel size mismatched" << std::endl;
         return 0;
     }
-
     for (const auto& grid_scale : kGridScaleList) {
         OutputSpatialSize += (bmrun_helper_->GetInputWidth() / grid_scale) * (bmrun_helper_->GetInputHeight() / grid_scale);
     }
     OutputSpatialSize *= kElmentAnchorNum;
-
     if (bmrun_helper_->GetOutputLength() != OutputSpatialSize) {
         std::cout << "output spatial size mismatched" << std::endl;
         return 0;
     }
     // static constexpr int32_t KOutputSpatialSize = bmrun_helper_->GetOutputLength();
+    ReadClaNames("./inputs/label_coco_80.txt");
 
+    return 1;
+}
+
+int32_t Yolov5::ReadClaNames(const std::string& filename) {
+    std::ifstream ifs(filename);
+    if (ifs.fail()) {
+        std::cout << "failed to read " << filename << std::endl;
+        return 0;
+    }
+    cls_names_.clear();
+    std::string str;
+    while (getline(ifs, str)) {
+        cls_names_.push_back(str);
+    }
     return 1;
 }
 
@@ -97,7 +111,7 @@ void Yolov5::GetBoxPerLevel(float* data_ptr, const int32_t grid_h, const int32_t
 #endif
                         int32_t x = cx - w / 2;
                         int32_t y = cy - h / 2;
-                        bbox_list.push_back(Bbox2D(cls_id, cls_confidence, x, y, w, h));
+                        bbox_list.push_back(Bbox2D(cls_id, cls_names_[cls_id], cls_confidence, x, y, w, h));
                     }
                 }
                 index += kOutputChannels;

@@ -37,22 +37,20 @@ int32_t OpenvinoRoadseg::Initialize(const std::string& model) {
         return 0;
     }
 
+    // Check output tensor meta
     if (bmrun_helper_->Initialize() != 1) {
         std::cout << "bmrun_helper initialization failed" << std::endl;
         bmrun_helper_.reset();
         return 0;
     }
-
     if (bmrun_helper_->GetOutputChannelNum() != kOutputChannelNum) {
         std::cout << "output channel size mismatched" << std::endl;
         return 0;
     }
-
     if (bmrun_helper_->GetOutputHeight() != kOutputHeight) {
         std::cout << "output height size mismatched" << std::endl;
         return 0;
     }
-
     if (bmrun_helper_->GetOutputWidth() != kOutputWidth) {
         std::cout << "output width size mismatched" << std::endl;
         return 0;
