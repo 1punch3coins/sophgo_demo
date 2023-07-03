@@ -40,7 +40,7 @@ int32_t UfLanedetv2::Initialize(const std::string& model_pwd) {
     for (const auto& output_name : sOutputNameList) {
         p_meta->AddOutputTensorMeta(output_name);
     }
-    bmrun_helper_.reset(BmrunHelper::Create(model_pwd, kTaskTypeLaneDet, p_meta));
+    bmrun_helper_.reset(BmrunHelper::Create(model_pwd, p_meta));
 
     if (!bmrun_helper_) {
         return 0;
@@ -137,7 +137,7 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
     const auto& t_pre_process0 = std::chrono::steady_clock::now();
     int32_t original_width = original_mat.cols;
     int32_t original_height = original_mat.rows;
-    bmrun_helper_->PreProcess(original_mat);
+    bmrun_helper_->PreProcess(original_mat,  kCropStyle::CropLower_Coverup_1);
     cv::Rect src_crop = bmrun_helper_->GetCropInfo().first;
     const auto& t_pre_process1 = std::chrono::steady_clock::now();
 

@@ -31,7 +31,7 @@ int32_t OpenvinoRoadseg::Initialize(const std::string& model) {
     for (const auto& output_name : sOutputNameList) {
         p_meta->AddOutputTensorMeta(output_name);
     }
-    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeRoadSeg, p_meta));
+    bmrun_helper_.reset(BmrunHelper::Create(model, p_meta));
 
     if (!bmrun_helper_) {
         return 0;
@@ -62,7 +62,7 @@ int32_t OpenvinoRoadseg::Initialize(const std::string& model) {
 int32_t OpenvinoRoadseg::Process(cv::Mat& original_mat, Result& result) {
     // 1. prep-rocess
     const auto& t_pre_process0 = std::chrono::steady_clock::now();
-    bmrun_helper_->PreProcess(original_mat);
+    bmrun_helper_->PreProcess(original_mat, kCropStyle::CropLower_Coverup_0);
     const auto& t_pre_process1 = std::chrono::steady_clock::now();
 
     // 2. inference

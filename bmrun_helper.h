@@ -8,11 +8,11 @@
 #include "bmcv_api_ext.h"
 #include "bmruntime_interface.h"
 
-enum {
-    kTaskTypeDet,
-    kTaskTypeSeg,
-    kTaskTypeLaneDet,
-    kTaskTypeRoadSeg,
+enum kCropStyle{
+    CropAll_Coverup,
+    CropAll_Embedd,
+    CropLower_Coverup_0,
+    CropLower_Coverup_1
 };
 
 class NetworkMeta {
@@ -100,10 +100,10 @@ public:
 
 class BmrunHelper {
 public:
-    static BmrunHelper* Create(const std::string& model, int32_t task_id, NetworkMeta* t_info);
+    static BmrunHelper* Create(const std::string& model, NetworkMeta* t_info);
     int32_t Initialize();
-    int32_t PreProcess(cv::Mat& original_img);
-    int32_t PreProcess(cv::Mat& original_img, const std::string& input_name);
+    int32_t PreProcess(cv::Mat& original_img, const kCropStyle& style);
+    int32_t PreProcess(cv::Mat& original_img, const std::string& input_name, const kCropStyle& style);
     int32_t Inference();
     int32_t Finalize();
 
@@ -170,7 +170,7 @@ public:
 private:
     template <typename T>
     int32_t PermuateAndNormalize(T* input_ptr, uint8_t* src, const int32_t input_h, const int32_t input_w, const int32_t input_c);
-    int32_t SetCropAttr(const int32_t src_w, int32_t src_h, const int32_t dst_w, const int32_t dst_h);
+    int32_t SetCropAttr(const int32_t src_w, int32_t src_h, const int32_t dst_w, const int32_t dst_h, const kCropStyle style);
     int32_t ConvertNormalizedParameters(float* mean, float* norm);
 
 private:
@@ -181,7 +181,6 @@ private:
     bm_handle_t bm_handle_;
 
 private:
-    int32_t task_;
     std::unique_ptr<NetworkMeta> network_meta_;
     cv::Rect src_crop_;
     cv::Rect dst_crop_;

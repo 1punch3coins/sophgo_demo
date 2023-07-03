@@ -12,7 +12,7 @@
 #include <chrono>
 
 int main(int argc, char* argv[]) {
-    cv::Mat original_img = cv::imread("./inputs/test3.png");
+    cv::Mat original_img = cv::imread("./resource/inputs/test3.png");
     Yolov8 yolo;
     if (yolo.Initialize("./resource/models/yolov8s_post_1684x_fp16.bmodel") != 1) {
         std::cout << "yolo initialization uncompleted" << std::endl;
@@ -29,14 +29,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     
-    cv::VideoCapture cap("./resource/inputs/campus_seg.avi");
-    int32_t frame_width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
-    int32_t frame_height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
-    cv::VideoWriter video_writer("./resource/outputs/campus_output.avi", cv::VideoWriter::fourcc('M', 'P', 'E', 'G'), 60, cv::Size(frame_width, frame_height), true);
-    if (!video_writer.isOpened()) {return 1;}
-    cap >> original_img;
-    static int32_t i = 0;
-    while (!original_img.empty()) {
+    // while (!original_img.empty()) {
         cv::Mat res_img;
         OpenvinoRoadseg::Result seg_res;
         if (roadseg.Process(original_img, seg_res) != 1) {
@@ -66,15 +59,7 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        float process_time = seg_res.process_time + det_res.process_time + lane_det_res.process_time;
-        float fps = 1000.0 / process_time;
-        cv::putText(res_img, "FPS: " + std::to_string(fps).substr(0, 4), cv::Point(30, 30), 0, 0.9, cv::Scalar(0, 255, 0), 2);
-        video_writer.write(res_img);
-        cap >> original_img;
-        std::cout << i++ << std::endl;
-        // cv::imwrite("./resource/outputs/output3.jpg", res_img);
-    }
-    cap.release();
-    video_writer.release();
+        cv::imwrite("./resource/outputs/output3.jpg", res_img);
+    // }
     return 0;
 }

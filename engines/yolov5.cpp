@@ -34,7 +34,7 @@ int32_t Yolov5::Initialize(const std::string& model) {
     p_meta->normalize.norm[0] = qNormList[0];
     p_meta->normalize.norm[1] = qNormList[1];
     p_meta->normalize.norm[2] = qNormList[2];
-    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeDet, p_meta));
+    bmrun_helper_.reset(BmrunHelper::Create(model, p_meta));
 
     if (!bmrun_helper_) {
         return 0;
@@ -125,7 +125,7 @@ int32_t Yolov5::Process(cv::Mat& original_mat, Result& result) {
     const auto& t_pre_process0 = std::chrono::steady_clock::now();
     int32_t original_w = original_mat.cols;
     int32_t original_h = original_mat.rows;
-    bmrun_helper_->PreProcess(original_mat);
+    bmrun_helper_->PreProcess(original_mat,  kCropStyle::CropAll_Embedd);
     const auto& t_pre_process1 = std::chrono::steady_clock::now();
 
     // 2. inference

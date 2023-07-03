@@ -8,10 +8,9 @@
 
 #define USE_BMCV true
 
-BmrunHelper* BmrunHelper::Create(const std::string& model, int32_t task_id, NetworkMeta* p_meta) {
+BmrunHelper* BmrunHelper::Create(const std::string& model, NetworkMeta* p_meta) {
     BmrunHelper*p = new BmrunHelper();
     p->model_pwd_ = model.c_str();
-    p->task_ = task_id;
     p->network_meta_.reset(p_meta);
     return p;
 }
@@ -207,8 +206,8 @@ int32_t BmrunHelper::PermuateAndNormalize(T* input_ptr, uint8_t* src, const int3
     return 1;
 }
 
-int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32_t dst_w, const int32_t dst_h) {
-    if (task_ == kTaskTypeSeg) {
+int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32_t dst_w, const int32_t dst_h, const kCropStyle style) {
+    if (style == kCropStyle::CropAll_Coverup) {    // retain
         src_crop_.x = 0;
         src_crop_.y = 0;
         src_crop_.width = src_w;
@@ -219,7 +218,7 @@ int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32
         dst_crop_.height = dst_h;
         return 1;
     }
-    if (task_ == kTaskTypeLaneDet) {
+    if (style == kCropStyle::CropLower_Coverup_1) {    // a very distinct one, shed 0.4 top part of src, disgard of ratio
         src_crop_.x = 0;
         src_crop_.y = src_h * 0.4;
         src_crop_.width = src_w;
@@ -228,8 +227,9 @@ int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32
         dst_crop_.y = 0;
         dst_crop_.width = dst_w;
         dst_crop_.height = dst_h;
+        return 1;
     }
-    if (task_ == kTaskTypeRoadSeg) {
+    if (style == kCropStyle::CropLower_Coverup_0) {    // shed top part of src, retain width and make the crop ratio equals to model's input's
         float src_ratio = 1.0 * src_h / src_w;
         float dst_ratio = 1.0 * dst_h / dst_w;
         if (src_ratio > dst_ratio) {
@@ -243,13 +243,13 @@ int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32
             src_crop_.x = 0;
             src_crop_.y = 0;
         }
-        dst_crop_.width = dst_w;
-        dst_crop_.height = dst_h;
         dst_crop_.x = 0;
         dst_crop_.y = 0;
+        dst_crop_.width = dst_w;
+        dst_crop_.height = dst_h;
         return 1;
     }
-    if (task_ == kTaskTypeDet) {
+    if (style == kCropStyle::CropAll_Embedd) {    // embedd src into dst's center, src's ratio not changed
         src_crop_.x = 0;
         src_crop_.y = 0;
         src_crop_.width = src_w;
@@ -275,12 +275,12 @@ int32_t BmrunHelper::SetCropAttr(const int32_t src_w, int32_t src_h, const int32
     return 1;
 }
 
-int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
+int32_t BmrunHelper::PreProcess(cv::Mat& original_img, const kCropStyle& style) {
     auto tensor_meta = network_meta_->input_tensor_meta_list[0];
     int32_t input_h = tensor_meta.net_in_h;
     int32_t input_w = tensor_meta.net_in_w;
     int32_t input_c = tensor_meta.net_in_c;
-    SetCropAttr(original_img.cols, original_img.rows, tensor_meta.net_in_w, tensor_meta.net_in_h);
+    SetCropAttr(original_img.cols, original_img.rows, tensor_meta.net_in_w, tensor_meta.net_in_h, style);
     if (!USE_BMCV) {
         const auto& t0 = std::chrono::steady_clock::now();
         cv::Mat sample = cv::Mat::zeros(input_h, input_w, CV_8UC3);
@@ -304,7 +304,7 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
         cv::bmcv::toBMI(original_img, &original_bm_img);
 
         // 1. Do crop and resize & convert color channel and permute
-        if (task_ == kTaskTypeSeg || task_ == kTaskTypeRoadSeg || task_ == kTaskTypeLaneDet) {
+        if (style == kCropStyle::CropAll_Coverup || style == kCropStyle::CropLower_Coverup_1 || style == kCropStyle::CropLower_Coverup_0) {
             bmcv_rect src_crop;
             src_crop.start_x = src_crop_.x;
             src_crop.start_y = src_crop_.y;
@@ -312,7 +312,7 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
             src_crop.crop_h = src_crop_.height;
             bmcv_image_vpp_convert(bm_handle_, 1, original_bm_img, &bm_mat_resized_, &src_crop);
         } 
-        if (task_ == kTaskTypeDet) {
+        if (style == kCropStyle::CropAll_Embedd) {
             bmcv_rect src_crop;
             src_crop.start_x = src_crop_.x;
             src_crop.start_y = src_crop_.y;

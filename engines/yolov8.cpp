@@ -44,7 +44,7 @@ int32_t Yolov8::Initialize(const std::string& model) {
     for (const auto& output_name : sOutputNameList) {
         p_meta->AddOutputTensorMeta(output_name);
     }
-    bmrun_helper_.reset(BmrunHelper::Create(model, kTaskTypeDet, p_meta));
+    bmrun_helper_.reset(BmrunHelper::Create(model, p_meta));
 
     if (!bmrun_helper_) {
         return 0;
@@ -137,7 +137,7 @@ int32_t Yolov8::Process(cv::Mat& original_mat, Result& result) {
     const auto& t_pre_process0 = std::chrono::steady_clock::now();
     int32_t original_w = original_mat.cols;
     int32_t original_h = original_mat.rows;
-    bmrun_helper_->PreProcess(original_mat);
+    bmrun_helper_->PreProcess(original_mat, kCropStyle::CropAll_Embedd);
     const auto& t_pre_process1 = std::chrono::steady_clock::now();
 
     // 2. inference
