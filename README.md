@@ -8,6 +8,7 @@ A very simple inference framework for sophgo BM1684 and BM1684X series tpus.
 |-------|---------------|-------------|----------------|
 |Yolov8s|2.0ms|6.5ms|0~1ms|
 |Roadseg|1.5ms|11.0ms|13.0ms|
+
 The Tpu_inference time is fixed as the model size and pre_processed image size is fixed. The pre_preocessed time and post_processed time
 is determined by the original input image size. Have fun!
 
