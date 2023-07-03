@@ -11,3 +11,7 @@ A very simple inference framework for sophgo BM1684 and BM1684X series tpus.
 
 The Tpu_inference time is fixed as the model size and pre_processed image size is fixed. The pre_preocessed time and post_processed time
 is determined by the original input image size. Have fun!
+
+
+https://github.com/1punch3coins/sophgo_demo/assets/133486152/458672e0-b405-4894-babb-07489ba8ee5f
+
