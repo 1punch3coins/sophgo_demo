@@ -8,6 +8,7 @@
 
 #include "bmcv_api.h"
 #include "bmcv_api_ext.h"
+#include "tracker/target_tracker.h"
 
 #include <chrono>
 
@@ -28,6 +29,7 @@ int main(int argc, char* argv[]) {
         std::cout << "lane_det initialization uncompleted" << std::endl;
         return 0;
     }
+    Tracker tracker;
     
     cv::VideoCapture cap("./resource/inputs/campus_seg.avi");
     int32_t frame_width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
@@ -49,10 +51,6 @@ int main(int argc, char* argv[]) {
             std::cout << "yolo forward uncompleted" << std::endl;
             return 0;
         }
-        for (const auto& box: det_res.bbox_list) {
-            cv::putText(res_img, box.cls_name, cv::Point(box.x, box.y - 6), 0, 0.8, cv::Scalar(0, 255, 0), 2);
-            cv::rectangle(res_img, cv::Rect(box.x, box.y, box.w, box.h), cv::Scalar(0, 255, 0), 2);
-        }
 
         UfLanedetv2::Result lane_det_res;
         if (uf_lanedet.Process(original_img, lane_det_res) != 1) {
@@ -66,13 +64,37 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
+
+        std::vector<const Bbox2D*> unmatched_bboxes;
+        tracker.Update(det_res.bbox_list, unmatched_bboxes);
+        for (const auto& box : unmatched_bboxes) {
+            const auto bbox = *box;
+            cv::putText(res_img, bbox.cls_name + " " + std::to_string(bbox.cls_confidence).substr(0, 4), cv::Point(bbox.x, bbox.y - 6), 0, 0.7, cv::Scalar(100, 100, 100), 2);
+            cv::rectangle(res_img, cv::Rect(bbox.x, bbox.y, bbox.w, bbox.h), cv::Scalar(100, 100, 100), 2);            
+        }
+        for (const auto& tracklet: *(tracker.GetNewTracklets())) {
+            const auto& box = tracklet.get()->State2Bbox();
+            cv::putText(res_img, std::to_string(tracklet.get()->GetTrackId()) + " " + box.cls_name, cv::Point(box.x, box.y - 6), 0, 0.7, cv::Scalar(0, 255, 0), 2);
+            cv::rectangle(res_img, cv::Rect(box.x, box.y, box.w, box.h), cv::Scalar(0, 255, 0), 2);
+        }
+        for (const auto& tracklet: *(tracker.GetActiveTracklets())) {
+            const auto& box = tracklet.get()->State2Bbox();
+            int32_t len = tracklet.get()->GetTrackletLength();
+            int32_t green_scalar = 255 - len / 2;
+            int32_t red_scalar = len;
+            green_scalar = green_scalar > 0 ? green_scalar : 0;
+            red_scalar = red_scalar < 255 ? red_scalar : 255;
+            cv::putText(res_img, std::to_string(tracklet.get()->GetTrackId()) + " " + box.cls_name, cv::Point(box.x, box.y - 6), 0, 0.7, cv::Scalar(0, green_scalar, red_scalar), 2);
+            cv::rectangle(res_img, cv::Rect(box.x, box.y, box.w, box.h), cv::Scalar(0, green_scalar, red_scalar), 2);
+        }
+
         float process_time = seg_res.process_time + det_res.process_time + lane_det_res.process_time;
         float fps = 1000.0 / process_time;
         cv::putText(res_img, "FPS: " + std::to_string(fps).substr(0, 4), cv::Point(30, 30), 0, 0.9, cv::Scalar(0, 255, 0), 2);
+        cv::putText(res_img, "Frame: " + std::to_string(i), cv::Point(180, 30), 0, 0.9, cv::Scalar(0, 255, 0), 2);
         video_writer.write(res_img);
         cap >> original_img;
         std::cout << i++ << std::endl;
-        // cv::imwrite("./resource/outputs/output3.jpg", res_img);
     }
     cap.release();
     video_writer.release();

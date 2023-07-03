@@ -70,7 +70,7 @@ int32_t OpenvinoRoadseg::Process(cv::Mat& original_mat, Result& result) {
 
     // 3. post-process, retrive output and render result's mat
     const auto& t_post_process0 = std::chrono::steady_clock::now();
-    float* output = bmrun_helper_->GetInfernceOutput();
+    const float* output = bmrun_helper_->GetInferenceOutput();
     cv::Mat res(kOutputHeight, kOutputWidth, CV_8UC3);
     res.setTo(0);
     cv::Vec3b* ptr = (cv::Vec3b*)res.data;
@@ -78,7 +78,7 @@ int32_t OpenvinoRoadseg::Process(cv::Mat& original_mat, Result& result) {
     for (int32_t y = 0; y < kOutputHeight; y++) {
         for (int32_t x = 0; x < kOutputWidth; x++) {
             // float* scores = &output[y * (kOutputWidth * kOutputChannelNum) + x * kOutputChannelNum + 0];
-            float* scores = output + y * (kOutputWidth * kOutputChannelNum) + x * kOutputChannelNum + 0;
+            const float* scores = output + y * (kOutputWidth * kOutputChannelNum) + x * kOutputChannelNum + 0;
             uint8_t b, g, r;
             if (scores[0] > 0.7 && scores[1] < 0.3 && scores[2] < 0.3 && scores[3] < 0.3) {
                 b = 0;

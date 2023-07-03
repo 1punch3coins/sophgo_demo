@@ -286,7 +286,7 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
         cv::Mat sample = cv::Mat::zeros(input_h, input_w, CV_8UC3);
         cv::Mat resized_mat = sample(dst_crop_);
         cv::resize(original_img(src_crop_), resized_mat, resized_mat.size(), 0, 0, cv::INTER_NEAREST); // Why must assign fx and fy to enable deep copy?
-        cv::imwrite("./output.jpg", sample);
+        // cv::imwrite("./resource/output.jpg", sample);
         if (network_meta_->input_rgb) {
             cv::cvtColor(sample, sample, cv::COLOR_BGR2RGB);
         }
@@ -329,9 +329,9 @@ int32_t BmrunHelper::PreProcess(cv::Mat& original_img) {
             resize_padding_attr.if_memset = 1;
             bmcv_image_vpp_convert_padding(bm_handle_, 1, original_bm_img, &bm_mat_resized_, &resize_padding_attr, &src_crop);
         }
-        cv::Mat cv_mat_resized;
-        cv::bmcv::toMAT(&bm_mat_resized_, cv_mat_resized);
-        cv::imwrite("./output.jpg", cv_mat_resized);
+        // cv::Mat cv_mat_resized;
+        // cv::bmcv::toMAT(&bm_mat_resized_, cv_mat_resized);
+        // cv::imwrite("./resource/output.jpg", cv_mat_resized);
 
         // 2. Do normalization
         // Currently bmcv doesn't support normalize to nhwc format, so use cpu to normalize instead

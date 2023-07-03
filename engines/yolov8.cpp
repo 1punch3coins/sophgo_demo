@@ -69,7 +69,7 @@ int32_t Yolov8::Initialize(const std::string& model) {
         return 0;
     }
 
-    ReadClaNames("./inputs/label_coco_80.txt");
+    ReadClaNames("./resource/inputs/label_coco_80.txt");
 
     return 1;
 }
@@ -145,7 +145,7 @@ int32_t Yolov8::Process(cv::Mat& original_mat, Result& result) {
 
     // 3.1 post-process, retrive output and scale bboxes
     const auto& t_post_process0 = std::chrono::steady_clock::now();
-    float* output = bmrun_helper_->GetInfernceOutput();
+    const float* output = bmrun_helper_->GetInferenceOutput();
     cv::Rect dst_crop = bmrun_helper_->GetCropInfo().second;
     std::vector<Bbox2D> bbox_list;
     int32_t index = 0;

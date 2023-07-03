@@ -146,10 +146,10 @@ int32_t UfLanedetv2::Process(cv::Mat& original_mat, Result& result) {
 
     // 3.1 post-process, retrive outputs & do argmax to get valid rows and cols
     const auto& t_post_process0 = std::chrono::steady_clock::now();
-    float* loc_row = bmrun_helper_->GetInfernceOutput(sOutputNameList[0]);
-    float* loc_col = bmrun_helper_->GetInfernceOutput(sOutputNameList[1]);
-    float* exist_row = bmrun_helper_->GetInfernceOutput(sOutputNameList[2]);
-    float* exist_col = bmrun_helper_->GetInfernceOutput(sOutputNameList[3]);
+    const float* loc_row = bmrun_helper_->GetInferenceOutput(sOutputNameList[0]);
+    const float* loc_col = bmrun_helper_->GetInferenceOutput(sOutputNameList[1]);
+    const float* exist_row = bmrun_helper_->GetInferenceOutput(sOutputNameList[2]);
+    const float* exist_col = bmrun_helper_->GetInferenceOutput(sOutputNameList[3]);
 
     int32_t offset_row = kOutputRowNum * kOutputChannelNum;
     int32_t offset_col = kOutputColNum * kOutputChannelNum;

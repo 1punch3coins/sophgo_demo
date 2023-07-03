@@ -27,7 +27,7 @@ public:
     int32_t Process(cv::Mat& original_mat, Result& result);
     
 private:
-    void GetBoxPerLevel(float* data_ptr, const int32_t grid_h, const int32_t grid_w, const int32_t delta_x, const int32_t delta_y , const float scale_h, const float scale_w, std::vector<Bbox2D>& bbox_list);
+    void GetBoxPerLevel(const float* data_ptr, const int32_t grid_h, const int32_t grid_w, const int32_t delta_x, const int32_t delta_y , const float scale_h, const float scale_w, std::vector<Bbox2D>& bbox_list);
     int32_t ReadClaNames(const std::string& filename);
 
 private:

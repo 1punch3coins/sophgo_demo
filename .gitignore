@@ -1,4 +1,6 @@
 /.vscode
 /build
-/models/ufldv2_r18_320x1600_1684x_fp16.bmodel
+/resource/models/ufldv2_r18_320x1600_1684x_fp16.bmodel
+/resource/inputs/
+/resource/outputs/campus_output.avi
 /output.jpg

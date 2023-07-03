@@ -108,11 +108,11 @@ public:
     int32_t Finalize();
 
 public:
-    float* GetInfernceOutput(const std::string& tensor_name) const {
+    const float* GetInferenceOutput(const std::string& tensor_name) const {
         int32_t index = network_meta_->output_name2index.find(tensor_name)->second;
         return (float*)output_ptrs_[index];
     }
-    int8_t* GetInfernceOutput2(const std::string& tensor_name) const {
+    const int8_t* GetInferenceOutput2(const std::string& tensor_name) const {
         int32_t index = network_meta_->output_name2index.find(tensor_name)->second;
         return (int8_t*)output_ptrs_[index];
     }
@@ -145,7 +145,7 @@ public:
     }
 
 public:
-    float* GetInfernceOutput() const {
+    float* GetInferenceOutput() const {
         return (float*)output_ptrs_[0];
     }
     int32_t GetInputHeight() const {

@@ -45,7 +45,7 @@ struct PointXYZRGB {
 // struct Lane2D {
 //     std::vector<Point2D> lane_points;
 // };
-typedef std::vector<Point2D> Lane2D ;
+typedef std::vector<Point2D> Lane2D;
 
 struct SegObj {
     int32_t label;

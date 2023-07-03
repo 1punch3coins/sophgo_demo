@@ -59,7 +59,7 @@ int32_t Yolov5::Initialize(const std::string& model) {
         return 0;
     }
     // static constexpr int32_t KOutputSpatialSize = bmrun_helper_->GetOutputLength();
-    ReadClaNames("./inputs/label_coco_80.txt");
+    ReadClaNames("./resource/inputs/label_coco_80.txt");
 
     return 1;
 }
@@ -78,7 +78,7 @@ int32_t Yolov5::ReadClaNames(const std::string& filename) {
     return 1;
 }
 
-void Yolov5::GetBoxPerLevel(float* data_ptr, const int32_t grid_h, const int32_t grid_w, const int32_t delta_x, const int32_t delta_y , const float scale_h, const float scale_w, std::vector<Bbox2D>& bbox_list) {
+void Yolov5::GetBoxPerLevel(const float* data_ptr, const int32_t grid_h, const int32_t grid_w, const int32_t delta_x, const int32_t delta_y , const float scale_h, const float scale_w, std::vector<Bbox2D>& bbox_list) {
     int32_t index = 0;
     // loop for every anchor size
     for (int32_t anchor = 0; anchor < kElmentAnchorNum; anchor++) {
@@ -133,7 +133,7 @@ int32_t Yolov5::Process(cv::Mat& original_mat, Result& result) {
 
     // 3.1 post-process, retrive output and scale bboxes
     const auto& t_post_process0 = std::chrono::steady_clock::now();
-    float* output = bmrun_helper_->GetInfernceOutput();
+    const float* output = bmrun_helper_->GetInferenceOutput();
     cv::Rect dst_crop = bmrun_helper_->GetCropInfo().second;
     std::vector<Bbox2D> bbox_list;
     for (const auto& grid_scale : kGridScaleList) {
