@@ -59,12 +59,12 @@ int32_t Yolov5::Initialize(const std::string& model) {
         return 0;
     }
     // static constexpr int32_t KOutputSpatialSize = bmrun_helper_->GetOutputLength();
-    ReadClaNames("./resource/inputs/label_coco_80.txt");
+    ReadClsNames("./resource/inputs/label_coco_80.txt");
 
     return 1;
 }
 
-int32_t Yolov5::ReadClaNames(const std::string& filename) {
+int32_t Yolov5::ReadClsNames(const std::string& filename) {
     std::ifstream ifs(filename);
     if (ifs.fail()) {
         std::cout << "failed to read " << filename << std::endl;

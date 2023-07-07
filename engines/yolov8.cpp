@@ -19,13 +19,12 @@ static constexpr float qMeanList[] = {0.0, 0.0, 0.0};
 static constexpr float qNormList[] = {1.0, 1.0, 1.0};
 static constexpr int32_t kGridScaleList[] = {8, 16, 32};
 static constexpr int32_t kElmentAnchorNum = 1;
-static constexpr int32_t kOutputChannelNum = 1;
 static constexpr int32_t kClassNum = 80;
 #if MODEL_POST_ORIGIN
-static constexpr int32_t kOutputChannels = kClassNum + 4;
+static constexpr int32_t kOutputChannelNum = kClassNum + 4;
 #define OUTPUT_NLC false
 #else
-static constexpr int32_t kOutputChannels = 2 + 4;
+static constexpr int32_t kOutputChannelNum = 2 + 4;
 #define OUTPUT_NLC true
 #endif
 static int32_t OutputSpatialSize = 0;
@@ -56,7 +55,7 @@ int32_t Yolov8::Initialize(const std::string& model) {
     }
 
     // Check output tensor meta
-    if (bmrun_helper_->GetOutputChannelNum() != kOutputChannels) {
+    if (bmrun_helper_->GetOutputChannelNum() != kOutputChannelNum) {
         std::cout << "output channel size mismatched" << std::endl;
         return 0;
     }
@@ -69,12 +68,12 @@ int32_t Yolov8::Initialize(const std::string& model) {
         return 0;
     }
 
-    ReadClaNames("./resource/inputs/label_coco_80.txt");
+    ReadClsNames("./resource/inputs/label_coco_80.txt");
 
     return 1;
 }
 
-int32_t Yolov8::ReadClaNames(const std::string& filename) {
+int32_t Yolov8::ReadClsNames(const std::string& filename) {
     std::ifstream ifs(filename);
     if (ifs.fail()) {
         std::cout << "failed to read " << filename << std::endl;
@@ -126,7 +125,7 @@ void Yolov8::GetBoxPerLevel(const float* data_ptr, int32_t& index, const int32_t
                 std::string cls_name = cls_names_[cls_id];
                 bbox_list.push_back(Bbox2D(cls_id, cls_name, cls_confidence, x, y, w, h));
             }
-            index += kOutputChannels;
+            index += kOutputChannelNum;
 #endif
         }
     }

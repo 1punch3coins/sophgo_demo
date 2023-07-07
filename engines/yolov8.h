@@ -26,7 +26,7 @@ public:
     
 private:
     void GetBoxPerLevel(const float* data_ptr, int32_t& index, const int32_t grid_h, const int32_t grid_w, const int32_t delta_x, const int32_t delta_y, const float scale_h, const float scale_w, std::vector<Bbox2D>& bbox_list);
-    int32_t ReadClaNames(const std::string& filename);
+    int32_t ReadClsNames(const std::string& filename);
     
 private:
     std::unique_ptr<BmrunHelper> bmrun_helper_;
