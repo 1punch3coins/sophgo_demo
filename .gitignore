@@ -1,10 +1,6 @@
 /.vscode
 /build
 /resource/models/ufldv2_r18_320x1600_1684x_fp16.bmodel
-/resource/models/yolov8s_seg_1684x_fp16.bmodel
 /resource/inputs/
 /resource/outputs/campus_output.avi
 /output.jpg
-
-/engines/yolov8_seg.h
-/engines/yolov8_seg.cpp
