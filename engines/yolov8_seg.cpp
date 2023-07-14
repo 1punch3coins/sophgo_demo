@@ -142,10 +142,6 @@ void Yolov8Seg::GetBoxPerLevel(const float* data_ptr, int32_t& index, const int3
                 // int32_t h = static_cast<int32_t>(data_ptr[index + 3] * scale_h);
                 // int32_t x = cx - w / 2;
                 // int32_t y = cy - h / 2;
-                x0 = x0 > 0 ? x0 : 0;
-                y0 = y0 > 0 ? y0 : 0;
-                x1 = x1 < 1920 ? x1 : 1920;
-                y1 = y1 < 1080 ? y1 : 1080;
                 std::string cls_name = cls_names_[cls_id];
                 bbox_list.push_back(Bbox2D(cls_id, cls_name, cls_confidence, x0, y0, x1-x0, y1-y0));
                 seg_channel_weights_list.push_back(std::pair<float, const float*>(cls_confidence, data_ptr + index + 6));
@@ -181,6 +177,12 @@ int32_t Yolov8Seg::Process(cv::Mat& original_mat, Result& result) {
         float scale_w = static_cast<float>(original_w) / dst_crop.width;
         float scale_h = static_cast<float>(original_h) / dst_crop.height;
         GetBoxPerLevel(output_box, index, grid_h, grid_w, dst_crop.x, dst_crop.y, scale_h, scale_w, bbox_list, seg_channel_weights_list);
+    }
+    for (auto& box : bbox_list) {
+        box.x = box.x > 0 ? box.x : 0;
+        box.y = box.y > 0 ? box.y : 0;
+        box.w = box.w + box.x < original_w ? box.w : original_w - box.x;
+        box.h = box.h + box.y < original_h ? box.h : original_h - box.y;
     }
 
     // 3.2 post-process, do nms
@@ -256,9 +258,9 @@ int32_t Yolov8Seg::Process(cv::Mat& original_mat, Result& result) {
     }
 #else   // official implementation, check https://github.com/ultralytics/ultralytics/blob/main/ultralytics/yolo/utils/ops.py#L601
     int32_t seg_crop_w = seg_grid_width - 2 * seg_grid_offset_x;
-    int32_t seg_crop_h = seg_grid_height - 2 * seg_grid_offset_y
+    int32_t seg_crop_h = seg_grid_height - 2 * seg_grid_offset_y;
     for (const auto& seg_cls_weight : seg_channel_weights_nms_lit) {
-        cv::Mat mask_mat(seg_grid_height, seg_grid_width, cv::Scalar(0));
+        cv::Mat mask_mat(seg_grid_height, seg_grid_width, CV_32FC1, cv::Scalar(0));
         float* ptr = (float*)mask_mat.data;
         for (int32_t i = 0; i < seg_grid_height * seg_grid_width; i++) {
             int32_t segcls_index = i * kSegChannelNum;
@@ -268,8 +270,10 @@ int32_t Yolov8Seg::Process(cv::Mat& original_mat, Result& result) {
             ptr[i] = 1.0 / (1 + exp(0 - ptr[i]));   // sigmoid
         }
         // cv::imwrite("./output.jpg", mask_mat * 255);
+        mask_mat = mask_mat(cv::Rect(seg_grid_offset_x, seg_grid_offset_y, seg_crop_w, seg_crop_h));
         cv::resize(mask_mat, mask_mat, cv::Size(original_w, original_h), cv::INTER_LINEAR);
-        masks.push_back(mask_mat(cv::Rect(seg_grid_offset_x, seg_grid_offset_y, seg_crop_w, seg_crop_h)) > 0.5);
+        auto bbox = bbox_nms_list[masks.size()];
+        masks.push_back(mask_mat(cv::Rect(bbox.x, bbox.y, bbox.w, bbox.h)) > 0.5);
     }
 #endif
 
