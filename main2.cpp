@@ -29,15 +29,16 @@ int main(int argc, char* argv[]) {
         std::cout << "lane_det initialization uncompleted" << std::endl;
         return 0;
     }
-    Tracker tracker;
     
     cv::VideoCapture cap("./resource/inputs/campus_seg.avi");
     int32_t frame_width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
     int32_t frame_height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
+    int32_t frame_fps = cap.get(cv::CAP_PROP_FPS);
     cv::VideoWriter video_writer("./resource/outputs/campus_output.avi", cv::VideoWriter::fourcc('M', 'P', 'E', 'G'), 60, cv::Size(frame_width, frame_height), true);
     if (!video_writer.isOpened()) {return 1;}
     cap >> original_img;
     static int32_t i = 0;
+    Tracker tracker(frame_fps);
     while (!original_img.empty()) {
         cv::Mat res_img;
         OpenvinoRoadseg::Result seg_res;

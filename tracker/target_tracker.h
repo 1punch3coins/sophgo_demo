@@ -78,7 +78,7 @@ public:
 
 class Tracker {
 public:
-    Tracker(const int32_t& max_lost_frame_num, const float& split_thresh_score, const float& cost_thresh_iou, const float& add_thresh_score):
+    Tracker(const float& split_thresh_score, const float& add_thresh_score, const float& cost_thresh_iou, const int32_t& max_lost_frame_num):
         split_thresh_score_(split_thresh_score),
         add_thresh_score_(add_thresh_score),
         cost_thresh_iou_(cost_thresh_iou),
@@ -86,11 +86,19 @@ public:
         cur_frame_id_(0),
         all_tracks_num_(0)
     {}
+    Tracker(const int32_t& max_lost_frame_num):
+        split_thresh_score_(0.5),   // Reference https://github.com/ultralytics/ultralytics/tracker/cfg/bytetrack.yaml
+        add_thresh_score_(0.6),     // Reference https://github.com/ultralytics/ultralytics/tracker/cfg/bytetrack.yaml
+        cost_thresh_iou_(0.0),      // Reference https://github.com/ultralytics/ultralytics/tracker/cfg/bytetrack.yaml
+        max_lost_frame_num_(max_lost_frame_num),
+        cur_frame_id_(0),
+        all_tracks_num_(0)
+    {}
     Tracker():
-        split_thresh_score_(0.3),
-        add_thresh_score_(0.4),
-        cost_thresh_iou_(0.3),
-        max_lost_frame_num_(50),
+        split_thresh_score_(0.5),   // Reference https://github.com/ultralytics/ultralytics/tracker/cfg/bytetrack.yaml
+        add_thresh_score_(0.6),     // Reference https://github.com/ultralytics/ultralytics/tracker/cfg/bytetrack.yaml
+        cost_thresh_iou_(0.0),      // Reference https://github.com/ultralytics/ultralytics/tracker/cfg/bytetrack.yaml
+        max_lost_frame_num_(50),    // Should be the same with input stream's fps
         cur_frame_id_(0),
         all_tracks_num_(0)
     {}
