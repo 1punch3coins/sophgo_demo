@@ -12,6 +12,7 @@
 #define INPUT_RGB true
 #define MODEL_POST_ORIGIN false
 #define IDENTIFIER "obj_det"
+#define DO_SEPERATE_ID_NMS true
 
 static constexpr int32_t kInputTensorNum = 1;
 static constexpr int32_t kOutputTensorNum = 2;
@@ -203,6 +204,7 @@ int32_t Yolov8Seg::Process(cv::Mat& original_mat, Result& result) {
         bbox_nms_list.push_back(bbox_list[i]);
         seg_channel_weights_nms_lit.push_back(seg_channel_weights_list[i].second);
         for (size_t j = i + 1; j < bbox_list.size(); j++) {
+#if !DO_SEPERATE_ID_NMS
             if (bbox_list[i].cls_id != bbox_list[j].cls_id) continue;
             int32_t inter_left   = std::max(bbox_list[i].x, bbox_list[j].x);
             int32_t inter_right  = std::min(bbox_list[i].x + bbox_list[i].w, bbox_list[j].x + bbox_list[j].w);
@@ -214,6 +216,22 @@ int32_t Yolov8Seg::Process(cv::Mat& original_mat, Result& result) {
             int32_t area_j = bbox_list[j].h * bbox_list[j].w;
             float iou = static_cast<float>(area_inter) / (area_i + area_j - area_inter);
             if (iou > nms_iou_threshold_) is_merged[j] = true;
+#else
+            int32_t inter_left   = std::max(bbox_list[i].x, bbox_list[j].x);
+            int32_t inter_right  = std::min(bbox_list[i].x + bbox_list[i].w, bbox_list[j].x + bbox_list[j].w);
+            int32_t inter_top    = std::max(bbox_list[i].y, bbox_list[j].y);
+            int32_t inter_bottom = std::min(bbox_list[i].y + bbox_list[i].h, bbox_list[j].y + bbox_list[j].h);
+            if (inter_left > inter_right || inter_top > inter_bottom) continue;
+            int32_t area_inter = (inter_right - inter_left) * (inter_bottom - inter_top);
+            int32_t area_i = bbox_list[i].h * bbox_list[i].w;
+            int32_t area_j = bbox_list[j].h * bbox_list[j].w;
+            float iou = static_cast<float>(area_inter) / (area_i + area_j - area_inter);
+            if (bbox_list[i].cls_id != bbox_list[j].cls_id) {
+                if (iou > nms_seperate_id_iou_threshold_) is_merged[j] = true;                 
+            } else {
+                if (iou > nms_iou_threshold_) is_merged[j] = true; 
+            }
+#endif
         }
     }
 

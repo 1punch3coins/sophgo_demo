@@ -2,7 +2,7 @@
 #include "target_tracker.h"
 #include "hungarian_algorithm.h"
 
-void XyahTrack::Initialize(const Bbox2D& bbox, const int32_t& track_id, const int32_t& frame_id) {
+void XyahTrack::Initialize(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& track_id, const int32_t& frame_id) {
     // Use xyah as the first four state variables, the others are their correspondant velocity, initialized as zero 
     EigenVector<kDimx> X;
     X << bbox.x, bbox.y, static_cast<float>(bbox.w) / bbox.h, bbox.h, 0, 0, 0, 0;
@@ -41,6 +41,7 @@ void XyahTrack::Initialize(const Bbox2D& bbox, const int32_t& track_id, const in
     tracklet_len_ = 0;
     det_score_ = bbox.cls_confidence;
     track_state_ = kTrackState::New;
+    mask_ = mask;
 }
 
 void XyahTrack::Predict() {
@@ -59,7 +60,7 @@ void XyahTrack::Predict() {
      kf_.Predict(Q);
 }
 
-void XyahTrack::Update(const Bbox2D& bbox, const int32_t& frame_id) {
+void XyahTrack::Update(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& frame_id) {
      EigenVector<kDimz> Z;    // New meassurement
      EigenMatrix<kDimz, kDimz> R;  // New measurment's uncertentiy
      const EigenVector<kDimx> X = kf_.GetStateMean();
@@ -75,6 +76,7 @@ void XyahTrack::Update(const Bbox2D& bbox, const int32_t& frame_id) {
      det_score_ = bbox.cls_confidence;
      cls_name_ = bbox.cls_name;
      frame_id_ = frame_id;
+     mask_ = mask;
 }
 
 Bbox2D XyahTrack::State2Bbox() const {
@@ -90,7 +92,7 @@ Bbox2D XyahTrack::State2Bbox() const {
      return bbox;
 }
 
-void XywhTrack::Initialize(const Bbox2D& bbox, const int32_t& track_id, const int32_t& frame_id) {
+void XywhTrack::Initialize(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& track_id, const int32_t& frame_id) {
     // Use xywh as the first four state variables, the others are their correspondant velocity, initialized as zero 
     EigenVector<kDimx> X;
     X << bbox.x, bbox.y, bbox.w, bbox.h, 0, 0, 0, 0;
@@ -131,6 +133,7 @@ void XywhTrack::Initialize(const Bbox2D& bbox, const int32_t& track_id, const in
     tracklet_len_ = 0;
     det_score_ = bbox.cls_confidence;
     track_state_ = kTrackState::New;
+    mask_ = mask;
 }
 
 void XywhTrack::Predict() {
@@ -151,7 +154,7 @@ void XywhTrack::Predict() {
      kf_.Predict(Q);
 }
 
-void XywhTrack::Update(const Bbox2D& bbox, const int32_t& frame_id) {
+void XywhTrack::Update(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& frame_id) {
      EigenVector<kDimz> Z;    // New meassurement
      EigenMatrix<kDimz, kDimz> R;  // New measurment's uncertentiy
      const EigenVector<kDimx> X = kf_.GetStateMean();
@@ -168,6 +171,7 @@ void XywhTrack::Update(const Bbox2D& bbox, const int32_t& frame_id) {
      det_score_ = bbox.cls_confidence;
      cls_name_ = bbox.cls_name;
      frame_id_ = frame_id;
+     mask_ = mask;
 }
 
 Bbox2D XywhTrack::State2Bbox() const {
@@ -295,7 +299,7 @@ void Tracker::LinearAssignment(const std::vector<std::shared_ptr<Track>>& cur_tr
      }
 }
 
-void Tracker::Update(const std::vector<Bbox2D>& det_boxes, std::vector<const Bbox2D*>& unmatched_boxes) {
+void Tracker::Update(const std::vector<Bbox2D>& det_boxes, const std::vector<cv::Mat>& mask_mats, std::vector<const Bbox2D*>& unmatched_boxes) {
      // 1. Predict the active and lost tracklets' next positions
      std::vector<std::shared_ptr<Track>> merged_tracklets(active_tracks_);
      merged_tracklets.insert(merged_tracklets.begin(), lost_tracks_.begin(), lost_tracks_.end());
@@ -306,11 +310,15 @@ void Tracker::Update(const std::vector<Bbox2D>& det_boxes, std::vector<const Bbo
      // 2. Split the current frame's meassurments into two sets
      std::vector<const Bbox2D*> high_conf_dets;
      std::vector<const Bbox2D*> low_conf_dets;
-     for (const auto& det_box : det_boxes) {
-          if (det_box.cls_confidence >= split_thresh_score_) {
-               high_conf_dets.push_back(&det_box);
+     std::vector<cv::Mat> low_conf_mask_mats;
+     std::vector<cv::Mat> high_conf_mask_mats;
+     for (int32_t i = 0; i < det_boxes.size(); i++) {
+          if (det_boxes[i].cls_confidence >= split_thresh_score_) {
+               high_conf_dets.push_back(&det_boxes[i]);
+               high_conf_mask_mats.push_back(mask_mats[i]);
           } else {
-               low_conf_dets.push_back(&det_box);
+               low_conf_dets.push_back(&det_boxes[i]);
+               low_conf_mask_mats.push_back(mask_mats[i]);
           }
      }
 
@@ -319,15 +327,17 @@ void Tracker::Update(const std::vector<Bbox2D>& det_boxes, std::vector<const Bbo
      std::vector<int32_t> dets_assignment_res;
      std::vector<std::shared_ptr<Track>> unmatched_tracklets;
      std::vector<const Bbox2D*> unmatched_high_conf_dets;
+     std::vector<cv::Mat> unmatched_high_conf_mask_mats;
      LinearAssignment(merged_tracklets, high_conf_dets, tracklets_assignment_res, dets_assignment_res);
      for (int32_t i = 0; i < merged_tracklets.size(); i++) {
           Track* tracklet = merged_tracklets[i].get();
           if (tracklets_assignment_res[i] >= 0) {
                const Bbox2D* bbox = high_conf_dets[tracklets_assignment_res[i]];
+               cv::Mat mask = high_conf_mask_mats[tracklets_assignment_res[i]];
                if (tracklet->GetTrackState() == kTrackState::Active) {
-                    tracklet->Update(*bbox, cur_frame_id_);
+                    tracklet->Update(*bbox, mask, cur_frame_id_);
                } else {
-                    tracklet->Update(*bbox, cur_frame_id_);
+                    tracklet->Update(*bbox, mask, cur_frame_id_);
                     // remove from lost vec & push_back into active vec
                     tracklet->MarkTrackState(kTrackState::Active);
                     active_tracks_.push_back(merged_tracklets[i]);
@@ -349,6 +359,7 @@ void Tracker::Update(const std::vector<Bbox2D>& det_boxes, std::vector<const Bbo
      for (int32_t i = 0; i < high_conf_dets.size(); i++) {
           if (dets_assignment_res[i] < 0) {
                unmatched_high_conf_dets.push_back(high_conf_dets[i]);
+               unmatched_high_conf_mask_mats.push_back(high_conf_mask_mats[i]);
           }
      }
 
@@ -361,10 +372,11 @@ void Tracker::Update(const std::vector<Bbox2D>& det_boxes, std::vector<const Bbo
           Track* tracklet = unmatched_tracklets[i].get();
           if (tracklets_assignment_res[i] >= 0) {
                const Bbox2D* bbox = low_conf_dets[tracklets_assignment_res[i]];
+               cv::Mat mask = low_conf_mask_mats[tracklets_assignment_res[i]];
                if (tracklet->GetTrackState() == kTrackState::Active) {
-                    tracklet->Update(*bbox, cur_frame_id_);
+                    tracklet->Update(*bbox, mask, cur_frame_id_);
                } else {
-                    tracklet->Update(*bbox, cur_frame_id_);
+                    tracklet->Update(*bbox, mask, cur_frame_id_);
                     // remove from lost vec & push_back into active vec
                     tracklet->MarkTrackState(kTrackState::Active);
                     active_tracks_.push_back(unmatched_tracklets[i]);
@@ -403,12 +415,14 @@ void Tracker::Update(const std::vector<Bbox2D>& det_boxes, std::vector<const Bbo
      tracklets_assignment_res.clear();
      dets_assignment_res.clear();
      std::vector<const Bbox2D*> unmatched_twice_high_conf_dets;
+     std::vector<cv::Mat> unmatched_twice_high_conf_mask_mats;
      LinearAssignment(new_tracks_, unmatched_high_conf_dets, tracklets_assignment_res, dets_assignment_res);
      for (int32_t i = new_tracks_.size() - 1; i > -1; i--) {
           Track* tracklet = new_tracks_[i].get();
           if (tracklets_assignment_res[i] >= 0) {
                const Bbox2D* bbox = unmatched_high_conf_dets[tracklets_assignment_res[i]];
-               tracklet->Update(*bbox, cur_frame_id_);
+               cv::Mat mask = unmatched_high_conf_mask_mats[tracklets_assignment_res[i]];
+               tracklet->Update(*bbox, mask, cur_frame_id_);
                // remove from new vec & push_back into active vec
                tracklet->MarkTrackState(kTrackState::Active);
                active_tracks_.push_back(new_tracks_[i]);
@@ -422,16 +436,19 @@ void Tracker::Update(const std::vector<Bbox2D>& det_boxes, std::vector<const Bbo
      for (int32_t i = 0; i < unmatched_high_conf_dets.size(); i++) {
           if (dets_assignment_res[i] < 0) {
                unmatched_twice_high_conf_dets.push_back(unmatched_high_conf_dets[i]);
+               unmatched_twice_high_conf_mask_mats.push_back(unmatched_high_conf_mask_mats[i]);
           }
      }
 
      // 4.1 Mark this frame's final unmatched high-conf dets as new tracklets
+     int32_t index = 0;
      for (const auto& bbox : unmatched_twice_high_conf_dets) {
           if (bbox->cls_confidence < add_thresh_score_) continue;
           // new_tracks_.push_back(std::make_shared<Track>(*bbox, all_tracks_num_++, cur_frame_id_));
           std::shared_ptr<Track> ptr(new XywhTrack());
-          ptr->Initialize(*bbox, all_tracks_num_++, cur_frame_id_);
+          ptr->Initialize(*bbox, unmatched_twice_high_conf_mask_mats[index], all_tracks_num_++, cur_frame_id_);
           new_tracks_.push_back(ptr);
+          index++;
      }
 
      // 4.2 Remove the lost tracklets whose lost time is longer than the threshold

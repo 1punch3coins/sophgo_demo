@@ -17,8 +17,8 @@ public:
     };
 
 public:
-    Yolov8Seg(float obj_threshold = 0.4, float cls_threshold = 0.2, float iou_threshold = 0.5):
-        obj_confidence_threshold_(obj_threshold), cls_confidence_threshold_(cls_threshold), nms_iou_threshold_(iou_threshold)
+    Yolov8Seg(float obj_threshold = 0.4, float cls_threshold = 0.2, float iou_threshold = 0.5, float seperate_id_iou_threshold = 0.9):
+        obj_confidence_threshold_(obj_threshold), cls_confidence_threshold_(cls_threshold), nms_iou_threshold_(iou_threshold), nms_seperate_id_iou_threshold_(seperate_id_iou_threshold)
     {}
 
 public:
@@ -36,5 +36,6 @@ private:
     float obj_confidence_threshold_;
     float cls_confidence_threshold_;
     float nms_iou_threshold_;
+    float nms_seperate_id_iou_threshold_;
     std::vector<std::string> cls_names_;
 };

@@ -25,9 +25,9 @@ public:
 
 public:
     virtual Bbox2D State2Bbox() const = 0;
-    virtual void Initialize(const Bbox2D& bbox, const int32_t& track_id, const int32_t& frame_id) = 0;
+    virtual void Initialize(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& track_id, const int32_t& frame_id) = 0;
     virtual void Predict() = 0;
-    virtual void Update(const Bbox2D& bbox, const int32_t& frame_id) = 0;
+    virtual void Update(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& frame_id) = 0;
 
 public:
     int32_t GetTrackId() const {
@@ -41,6 +41,9 @@ public:
     };
     kTrackState GetTrackState() const {
         return track_state_;
+    }
+    cv::Mat GetTrackMask() const {
+        return mask_;
     }
     void MarkTrackState(const kTrackState& state) {
         track_state_ = state;
@@ -57,23 +60,23 @@ protected:
     int32_t cls_id_;
     std::string cls_name_;
     float det_score_;
-    Bbox2D last_matched_mea_box_;
+    cv::Mat mask_;
 };
 
 class XyahTrack : public Track{
 public:
     Bbox2D State2Bbox() const override;
-    void Initialize(const Bbox2D& bbox, const int32_t& track_id, const int32_t& frame_id) override;
+    void Initialize(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& track_id, const int32_t& frame_id) override;
     void Predict() override;
-    void Update(const Bbox2D& bbox, const int32_t& frame_id) override;
+    void Update(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& frame_id);
 };
 
 class XywhTrack : public Track{
 public:
     Bbox2D State2Bbox() const override;
-    void Initialize(const Bbox2D& bbox, const int32_t& track_id, const int32_t& frame_id) override;
+    void Initialize(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& track_id, const int32_t& frame_id) override;
     void Predict() override;
-    void Update(const Bbox2D& bbox, const int32_t& frame_id) override;
+    void Update(const Bbox2D& bbox, const cv::Mat& mask, const int32_t& frame_id);
 };
 
 class Tracker {
@@ -106,6 +109,7 @@ public:
 public:
     void Initialize();
     void Update(const std::vector<Bbox2D>& det_boxes, std::vector<const Bbox2D*>& unmatched_boxes);
+    void Update(const std::vector<Bbox2D>& det_boxes, const std::vector<cv::Mat>& mask_mats, std::vector<const Bbox2D*>& unmatched_boxes);
 
 public:
     const std::vector<std::shared_ptr<Track>>* GetNewTracklets() const {
